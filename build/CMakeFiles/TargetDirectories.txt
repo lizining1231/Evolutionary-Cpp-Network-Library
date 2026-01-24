@@ -1,3 +1,0 @@
-/home/lizining/projects/cpp-im-gateway/build/CMakeFiles/cpp-im-gateway.dir
-/home/lizining/projects/cpp-im-gateway/build/CMakeFiles/edit_cache.dir
-/home/lizining/projects/cpp-im-gateway/build/CMakeFiles/rebuild_cache.dir
