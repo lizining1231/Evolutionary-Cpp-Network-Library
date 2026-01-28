@@ -7,6 +7,7 @@ obj/
 *.so
 *.a
 *.out
+echo_server
 
 # CMake generated files
 CMakeCache.txt
