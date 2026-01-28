@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.10)
-project(cpp-im-gateway LANGUAGES C CXX)
+project(echo_server LANGUAGES C CXX)
 
 # 改为C++11（您的代码使用了{}初始化，这是C++11特性）
 set(CMAKE_CXX_STANDARD 11)

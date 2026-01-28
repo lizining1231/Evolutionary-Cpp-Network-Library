@@ -3,12 +3,12 @@
 
 int main(void){
     try{
-        std::cout<<"echo server 启动"<<std::endl;
+        std::cout<<"Echo server started"<<std::endl;
 
         EchoServer server(8080);
         server.start();
 
-        std::cout<<"echo server 关闭"<<std::endl;
+        std::cout<<"Echo server stopped"<<std::endl;
         return 0;
 
     }catch(const std::runtime_error&e){
