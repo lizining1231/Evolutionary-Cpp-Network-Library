@@ -17,7 +17,8 @@ class EchoServer{
     void setupSocket();
     int acceptClient();
     void handleClient(int client_fd);
-    void cleanup(int client_fd);
+    void cleanupClient(int client_fd);
+    void cleanupServer();
    
 };
 #endif

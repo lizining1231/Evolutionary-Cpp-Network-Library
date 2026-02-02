@@ -18,7 +18,6 @@ EchoServer::EchoServer(int port):server_fd(-1),port(port){
 };
 
 EchoServer::~EchoServer(){
-
     stop();
 };
 
@@ -29,39 +28,36 @@ void EchoServer::start(){
     int client_fd=acceptClient();
     handleClient(client_fd);
 
-    cleanup(client_fd);
+    cleanupClient(client_fd);
     
 }   
 
 
 void EchoServer::stop(){
-
-    cleanup(-1);
+    cleanupServer();
     std::cerr<<"Server stoped"<<std::endl;
 }
 
 
-void EchoServer::cleanup(int client_fd){
-
+void EchoServer::cleanupClient(int client_fd){
     if(client_fd>=0){
         shutdown(client_fd, SHUT_WR);// 发送FIN
 
-        
         close(client_fd);
     
         client_fd=-1;
     }
+}
 
-    if(server_fd>=0){
+void EchoServer::cleanupServer(){
+     if(server_fd>=0){
         shutdown(server_fd, SHUT_WR);// 发送FIN
-
 
         close(server_fd);
 
         server_fd=-1;
     }
 }
-
 
 void EchoServer::setupSocket(){
 
