@@ -1,6 +1,10 @@
 #ifndef ECHO_SERVER_H
 #define ECHO_SERVER_H
 
+#include<sys/types.h>
+#include<unistd.h>
+#include <string>
+
 class Socket{
     public:
     explicit Socket(int port);
@@ -30,33 +34,10 @@ class EchoServer{
 
     int acceptClient();
     void handleClient(int client_fd);
+    std::string handleMessage(const char* buffer, ssize_t bytes_read);
     void cleanupClient(int client_fd);
 
-   
 };
-
-// 设计三个类：Socket、FileDescriptor、Connection
-
-
-
-/*
-class FileDescriptor{
-    public:
-    FileDescriptor();
-    ~FileDescriptor();
-
-    private:
-    void acceptClient();
-}
-
-class Connection{
-    public:
-    Connection();
-    ~Connection();
-
-    private:
-    void handleClient(int client_fd);
-}*/
 
 
 #endif

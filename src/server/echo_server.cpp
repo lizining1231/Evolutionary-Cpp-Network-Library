@@ -5,8 +5,8 @@
 #include<arpa/inet.h>
 #include<sys/socket.h>
 #include<stdexcept>
-#include <cerrno>
-#include <cstring>
+#include<cerrno>
+#include<cstring>
 #include<netinet/tcp.h>
 
 #define BUFFER_SIZE 1024
@@ -89,7 +89,6 @@ void EchoServer::start(){
     }
 }   
 
-
 int EchoServer::acceptClient(){
     
     std::cout<<"Waiting for client connection..."<<std::endl;
@@ -121,34 +120,52 @@ int EchoServer::acceptClient(){
     return client_fd;
 }
 
-
 void EchoServer::handleClient(int client_fd){
 
     char buffer[BUFFER_SIZE];
+    // 添加主循环
     while(true){
         ssize_t bytes_read=recv(client_fd,buffer,BUFFER_SIZE-1,0);
 
         if(bytes_read<=0){
             if(bytes_read==0){
                 std::cout<<"Client disconnected"<<std::endl;
-              
             }
             else{
                 std::cerr<<"Receive error"<<std::endl;
-                
             }
             break;
         }
+        // 依赖反转
+        std::string response=handleMessage(buffer,bytes_read);
 
-    buffer[bytes_read]='\0';// 读取到bytes_read字节，设此字节为‘\0’
+        if(send(client_fd, response.c_str(), response.length(), 0)<0){
+        std::cerr<<"Echo send error"<<std::endl;
+        break;
+        }
+        std::cout<<"recv num:"<<bytes_read<<std::endl;
+
+    }
+}
+
+
+void EchoServer::cleanupClient(int client_fd){
+     if(client_fd>=0){
+        shutdown(client_fd, SHUT_WR);// 发送FIN
+        close(client_fd);
+
+        client_fd=-1;
+    }
+}
+
+
+std::string EchoServer::handleMessage(char const* buffer,ssize_t bytes_read){
     
-    std::string response;
-
     bool is_http_request=(std::strstr(buffer,"HTTP/")!=NULL);
 
         if (is_http_request) {
             // 为测试工具提供HTTP响应
-            response=
+            return
             "HTTP/1.1 200 OK\r\n"
             "Content-Type: Text/plain\r\n"
             "Content-Length: 12\r\n"
@@ -157,26 +174,8 @@ void EchoServer::handleClient(int client_fd){
             "hello,world\n";
         }else{
             // 正常echo响应
-            response=std::string(buffer,bytes_read);
+            return std::string(buffer,bytes_read);
         }
         
-    if(send(client_fd, response.c_str(), response.length(), 0)<0){
-        std::cerr<<"Echo send error"<<std::endl;
-        break;
-        }
-        std::cout<<"recv num:"<<bytes_read<<std::endl;
-    }
-
 }
-
-void EchoServer::cleanupClient(int client_fd){
-     if(client_fd>=0){
-        shutdown(client_fd, SHUT_WR);// 发送FIN
-
-        close(client_fd);
-
-        client_fd=-1;
-    }
-}
-
 
