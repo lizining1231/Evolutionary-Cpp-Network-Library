@@ -4,17 +4,21 @@ services:
   im-gateway:
     build: .
     container_name: "im-gateway-${NODE_ENV:-dev}"
-    command: ["${PORT:-8080}"]
+    command: ["sleep", "infinity"]  # 容器启动后什么都不做，手动运行
     ports:
       - "${EXTERNAL_PORT:-8080}:${PORT:-8080}"
     environment:
       NODE_ENV: ${NODE_ENV:-development}
       LOG_LEVEL: ${LOG_LEVEL:-info}
       MAX_CONNECTIONS: ${MAX_CONNECTIONS:-1000}
-    healthcheck:
-      test: ["CMD", "sh", "-c", "netstat -ltn | grep :${PORT:-8080} || exit 1"]
-      interval: ${HEALTH_CHECK_INTERVAL:-30s}
-    restart: ${RESTART_POLICY:-unless-stopped}
+      PORT: ${PORT:-8080}  # 添加 PORT 环境变量，容器内使用
+    cap_add:
+      - SYS_PTRACE
+    # 注释掉 healthcheck，因为服务不会自动启动，healthcheck 会失败
+    # healthcheck:
+    #   test: ["CMD", "sh", "-c", "netstat -ltn | grep :${PORT:-8080} || exit 1"]
+    #   interval: ${HEALTH_CHECK_INTERVAL:-30s}
+    restart: "no"  # 手动控制
     networks:
       - im-network
 
