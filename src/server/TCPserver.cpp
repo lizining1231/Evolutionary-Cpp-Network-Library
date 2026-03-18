@@ -11,6 +11,7 @@
 #include<sys/socket.h>
 #include<vector> 
 #include <algorithm>
+#include <sys/time.h>
 
 #define BUFFER_SIZE 1024
 #define BACKLOG 128
@@ -97,7 +98,12 @@ void TCPServer::eventLoop(){
     while(1){
 
     read_fds=all_fds;
-    int activity=select(max_fd+1,&read_fds,NULL,NULL,NULL);
+
+    timeval tv;
+    tv.tv_sec=0;
+    tv.tv_usec=1000;
+
+    int activity=select(max_fd+1,&read_fds,NULL,NULL,&tv);
 
     if(activity<0){
         throw std::runtime_error(std::string("select:")+strerror(errno));
