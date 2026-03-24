@@ -5,21 +5,37 @@
 #include<unistd.h>
 #include<string>
 #include<vector>
+// 为什么类里面把public放前面，private里面声明变量放后面
+// 编译的时候不应该先定义声明变量吗？不会出错吗
+
+    // 管理单个socket的申请与释放
 class Socket{
     public:
-    explicit Socket(int port);
+    explicit Socket(int port);    // ?
     ~Socket();
     int getServer_fd() const;
+    std::string& getRecv_buffer();
     
 
     private:
     int server_fd;
+    std::string recv_buffer;
     void initSocket(int port);
     void cleanupServer();
 
     Socket(const Socket&)=delete;// 禁止拷贝
     Socket& operator=(const Socket&)=delete;
+
+    // 加移动语义?
 };
+     // 连接池实现，管理多个socket
+     
+/*class socketPool{
+    public:
+
+    private:
+    
+};*/
 
 class TCPServer{ 
     public:

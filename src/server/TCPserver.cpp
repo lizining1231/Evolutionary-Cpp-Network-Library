@@ -1,19 +1,19 @@
-#include"TCPserver.h"
-#include<iostream>
-#include<cstring>
-#include<unistd.h>
-#include<arpa/inet.h>
-#include<stdexcept>
-#include<cerrno>
-#include<netinet/tcp.h>
-#include<sys/select.h>
-#include<sys/time.h>
-#include<sys/socket.h>
-#include<vector> 
+#include "TCPserver.h"
+#include <iostream>
+#include <cstring>
+#include <unistd.h>
+#include <arpa/inet.h>
+#include <stdexcept>
+#include <cerrno>
+#include <netinet/tcp.h>
+#include <sys/select.h>
+#include <sys/time.h>
+#include <sys/socket.h>
+#include <vector> 
 #include <algorithm>
 #include <sys/time.h>
+#include <string>
 
-#define BUFFER_SIZE 1024
 #define BACKLOG 128
 
 Socket::Socket(int port):server_fd(-1){
@@ -26,6 +26,10 @@ Socket::~Socket(){
 
 int Socket::getServer_fd() const{
     return server_fd;
+}
+
+std::string& Socket::getRecv_buffer(){    // handleClient()要修改该成员变量，所以采取引用
+    return recv_buffer;
 }
 
 void Socket::initSocket(int port){
@@ -85,8 +89,8 @@ TCPServer::~TCPServer(){}
 
     
 void TCPServer::eventLoop(){
-    server_fd=socket.getServer_fd();
 
+    server_fd=socket.getServer_fd();
 
     FD_ZERO(&all_fds);
     FD_SET(server_fd,&all_fds);
@@ -102,7 +106,8 @@ void TCPServer::eventLoop(){
     timeval tv;
     tv.tv_sec=0;
     tv.tv_usec=1000;
-
+    
+    // 防止select阻塞导致P99飙升
     int activity=select(max_fd+1,&read_fds,NULL,NULL,&tv);
 
     if(activity<0){
@@ -142,7 +147,7 @@ int TCPServer::acceptClient(){
         client_fds.push_back(client_fd);
     }
     if(client_fd>max_fd){
-        max_fd=client_fd;
+        max_fd=client_fd;   // client_fd是递增的，可以用来重新设置最大值
     }
 
     // 将二进制的IP地址转换成字符串
@@ -157,25 +162,34 @@ int TCPServer::acceptClient(){
 
 
 void TCPServer::handleClientData(int client_fd){
+    // char buffer[BUFFER_SIZE];取消通用连接池，并且BUFFER_SIZE变更为RECV_BUFSIZE
 
-    char buffer[BUFFER_SIZE];
+    char temp_buffer[4096];
+    std::string& recv_buffer=socket.getRecv_buffer();
+    ssize_t bytes_read;
+    size_t pos;
 
-    ssize_t bytes_read=recv(client_fd,buffer,BUFFER_SIZE-1,0);
+    bytes_read=recv(client_fd,temp_buffer,sizeof(temp_buffer),0);
 
     if(bytes_read<=0){
+
         if(bytes_read==0){
             std::cout<<"Client disconnected"<<std::endl;
         }
+
         else{
             std::cerr<<"Receive error"<<std::endl;
         }
-        // 清理资源
+
+        // 清理资源并返回
         close(client_fd);
         FD_CLR(client_fd,&all_fds);
         
         auto it=std::find(client_fds.begin(),client_fds.end(),client_fd);
+
+        
         if(it!=client_fds.end()){
-            client_fds.erase(it);   // 将此fd从vector中删除
+        client_fds.erase(it);   // 将此fd从vector中删除
         }
 
         if(client_fd==max_fd){
@@ -187,18 +201,34 @@ void TCPServer::handleClientData(int client_fd){
         return;
     }
 
-        // 依赖反转
-        buffer[bytes_read] = '\0';
-        std::string response=handleMessage(buffer,bytes_read);
+    
+    recv_buffer.append(temp_buffer,bytes_read);    // 为进行职责分离，将临时缓冲区的数据追加到永久缓冲区，永久缓冲区负责处理
+
+    pos=recv_buffer.find('\r\n\r\n');
+
+    if(pos==std::string::npos){
+        return;    // 如果没找到字符串直接返回继续等待请求
+    }
+    else{
+
+        std::string request=recv_buffer.substr(0,pos+4);
+ // 依赖反转
+        // recv_buffer[bytes_read] = '\0';
+
+        std::string response=handleMessage(request.c_str(),bytes_read);
 
         if(send(client_fd, response.c_str(), response.length(), 0)<0){
         std::cerr<<" send error"<<std::endl;
         }
 
-        std::cout<<"recv num:"<<bytes_read<<std::endl;
+        recv_buffer.erase(0,pos+4);
+
+        std::cout<<"recv num: "<<bytes_read<<std::endl;
+    }
+
 }
 
-// 
+
 void TCPServer::cleanupClient(){
     for(int fd:client_fds){
         close(fd);
@@ -209,9 +239,9 @@ void TCPServer::cleanupClient(){
 
 
 
-std::string TCPServer::handleMessage(char const* buffer,ssize_t bytes_read){
+std::string TCPServer::handleMessage(char const* request,ssize_t bytes_read){     // 之后可以改成const *std::string，无需兼容数组
     
-    bool is_http_request=(std::strstr(buffer,"HTTP/")!=NULL);
+    bool is_http_request=(std::strstr(request,"HTTP/")!=NULL);
 
         if (is_http_request) {
             // 为测试工具提供HTTP响应
@@ -224,7 +254,7 @@ std::string TCPServer::handleMessage(char const* buffer,ssize_t bytes_read){
             "hello,world\n";
         }else{
             // 正常TCP响应
-            return std::string(buffer,bytes_read);
+            return std::string(request,bytes_read);
         }
         
 }
