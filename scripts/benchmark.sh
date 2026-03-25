@@ -153,32 +153,40 @@ sleep 2
 echo -e "${YELLOW}[2/5] 基准测试 (100并发)${NC}"
 BASELINE=$(wrk -t$THREADS -c100 -d${DURATION}s --latency $URL 2>&1)
 echo "$BASELINE" | grep "Requests/sec" | awk '{print "  QPS: "$2}'
-echo "$BASELINE" >> $REPORT_FILE.tmp
 sleep 2
 
-# 3. 阶梯加压
+# 3. 阶梯加压 - 修改部分：终端只显示简洁格式，报告保存完整输出
 echo -e "\n${YELLOW}[3/5] 阶梯加压测试${NC}"
 RESULTS=()
 CONCURRENCY=(100 200 400 600 800 1000 1200 1500)
 
+# 创建临时目录存储每个并发的详细结果
+TEMP_DIR="wrk_results_$$"
+mkdir -p "$TEMP_DIR"
+
+# 先保存汇总表头到报告文件
+echo -e "\n### 各并发完整测试结果 ###" >> $REPORT_FILE
+echo -e "===============================================================================\n" >> $REPORT_FILE
+
 for CONN in "${CONCURRENCY[@]}"; do
     echo -e "${BLUE}--- 测试 $CONN 并发 ---${NC}"
     
-    # 执行测试并提取关键数据
-    OUTPUT=$(wrk -t$THREADS -c$CONN -d${DURATION}s --latency $URL 2>&1)
+    # 执行压测，不输出到终端，只保存到临时文件
+    OUTPUT_FILE="${TEMP_DIR}/wrk_${CONN}concurrent.txt"
+    wrk -t$THREADS -c$CONN -d${DURATION}s --latency $URL > "$OUTPUT_FILE" 2>&1
     
-    # 提取数据
-    QPS=$(echo "$OUTPUT" | grep "Requests/sec" | awk '{print $2}')
-    LATENCY=$(echo "$OUTPUT" | grep "Latency" | head -1 | awk '{print $2}' | sed 's/ms//')
-    P99=$(echo "$OUTPUT" | grep "99%" | awk '{print $2}')
-    ERRORS=$(echo "$OUTPUT" | grep "Socket errors" | awk '{print $4}' | cut -d',' -f1)
+    # 提取数据用于终端显示
+    QPS=$(grep "Requests/sec" "$OUTPUT_FILE" | awk '{print $2}')
+    LATENCY=$(grep "Latency" "$OUTPUT_FILE" | head -1 | awk '{print $2}' | sed 's/ms//')
+    P99=$(grep "99%" "$OUTPUT_FILE" | awk '{print $2}')
+    ERRORS=$(grep "Socket errors" "$OUTPUT_FILE" | awk '{print $4}' | cut -d',' -f1)
     ERRORS=${ERRORS:-0}
     
-    # 判断状态
-    if [ $(echo "$LATENCY > 100" | bc) -eq 1 ] 2>/dev/null; then
+    # 判断状态和颜色
+    if [ -n "$LATENCY" ] && [ "$(echo "$LATENCY > 100" | bc 2>/dev/null)" = "1" ]; then
         STATUS="${RED}过载${NC}"
         STATUS_TEXT="过载"
-    elif [ $(echo "$LATENCY > 50" | bc) -eq 1 ] 2>/dev/null; then
+    elif [ -n "$LATENCY" ] && [ "$(echo "$LATENCY > 50" | bc 2>/dev/null)" = "1" ]; then
         STATUS="${YELLOW}瓶颈${NC}"
         STATUS_TEXT="瓶颈"
     else
@@ -186,13 +194,19 @@ for CONN in "${CONCURRENCY[@]}"; do
         STATUS_TEXT="正常"
     fi
     
-    # 显示结果
-    printf "  QPS: %8s  延迟: %5sms  P99: %5s  错误: %3s  %s\n" \
+    # 终端显示简洁格式
+    printf "  QPS: %8s  延迟: %6sms  P99: %6s  错误: %3s  %b\n" \
            "$QPS" "$LATENCY" "$P99" "$ERRORS" "$STATUS"
     
-    # 保存结果
+    # 保存到汇总表
     printf "%-8s %-8s %-8s %-8s %-8s %s\n" \
            "$CONN" "$QPS" "${LATENCY}ms" "$P99" "$ERRORS" "$STATUS_TEXT" >> $REPORT_FILE
+    
+    # 保存完整输出到报告文件（添加标题）
+    echo -e "\n### ${CONN}并发压测完整输出 ###" >> $REPORT_FILE
+    echo -e "-------------------------------------------------------------------------------" >> $REPORT_FILE
+    cat "$OUTPUT_FILE" >> $REPORT_FILE
+    echo -e "\n" >> $REPORT_FILE
     
     RESULTS+=("$CONN:$QPS:$LATENCY:$ERRORS")
     sleep 3
@@ -206,7 +220,7 @@ BEST_CONN=100
 BEST_QPS=0
 for R in "${RESULTS[@]}"; do
     IFS=':' read -r CONN QPS LAT ERR <<< "$R"
-    if (( $(echo "$QPS > $BEST_QPS" | bc -l) )); then
+    if [ -n "$QPS" ] && [ "$(echo "$QPS > $BEST_QPS" | bc -l 2>/dev/null)" = "1" ]; then
         BEST_QPS=$QPS
         BEST_CONN=$CONN
     fi
@@ -217,42 +231,43 @@ TURN_POINT=0
 PREV_QPS=0
 for R in "${RESULTS[@]}"; do
     IFS=':' read -r CONN QPS LAT ERR <<< "$R"
-    if (( $(echo "$PREV_QPS > 0" | bc -l) )) && (( $(echo "$QPS < $PREV_QPS * 0.95" | bc -l) )); then
-        TURN_POINT=$CONN
-        break
+    if [ -n "$PREV_QPS" ] && [ -n "$QPS" ]; then
+        if [ "$(echo "$PREV_QPS > 0" | bc -l 2>/dev/null)" = "1" ] && [ "$(echo "$QPS < $PREV_QPS * 0.95" | bc -l 2>/dev/null)" = "1" ]; then
+            TURN_POINT=$CONN
+            break
+        fi
     fi
     PREV_QPS=$QPS
 done
 
 # 5. 稳定性测试
 echo -e "\n${YELLOW}[5/5] 稳定性测试 (最佳并发 $BEST_CONN 跑5分钟)${NC}"
-STABILITY=$(wrk -t$THREADS -c$BEST_CONN -d300s --latency $URL 2>&1)
-STABLE_QPS=$(echo "$STABILITY" | grep "Requests/sec" | awk '{print $2}')
-STABLE_LAT=$(echo "$STABILITY" | grep "Latency" | head -1 | awk '{print $2}')
+STABILITY_OUTPUT="${TEMP_DIR}/stability_test.txt"
+wrk -t$THREADS -c$BEST_CONN -d300s --latency $URL > "$STABILITY_OUTPUT" 2>&1
+STABLE_QPS=$(grep "Requests/sec" "$STABILITY_OUTPUT" | awk '{print $2}')
+STABLE_LAT=$(grep "Latency" "$STABILITY_OUTPUT" | head -1 | awk '{print $2}')
 
-# 写入完整摘要
+# 在终端显示稳定性测试摘要
+echo -e "${GREEN}稳定性测试完成${NC}"
+echo "  QPS: $STABLE_QPS"
+echo "  延迟: $STABLE_LAT"
+
+# 保存稳定性测试结果到报告
+echo -e "\n### 稳定性测试 (${BEST_CONN}并发 5分钟) ###" >> $REPORT_FILE
+echo -e "-------------------------------------------------------------------------------" >> $REPORT_FILE
+cat "$STABILITY_OUTPUT" >> $REPORT_FILE
+echo -e "\n" >> $REPORT_FILE
+
+# 写入完整分析
 cat >> $REPORT_FILE << EOF
 
-二、完整测试摘要
--------------------------------------------------------------------------------
-
-【基准测试 - 100并发】
-$(wrk -t$THREADS -c100 -d10s $URL 2>&1)
-
-【最佳并发测试 - ${BEST_CONN}并发】
-$(wrk -t$THREADS -c$BEST_CONN -d30s --latency $URL 2>&1)
-
-【稳定性测试 - ${BEST_CONN}并发 5分钟】
-QPS: $STABLE_QPS
-延迟: $STABLE_LAT
-
-三、数据分析
+二、数据分析
 -------------------------------------------------------------------------------
 最佳并发点: $BEST_CONN (最高QPS: $BEST_QPS)
 系统拐点: $TURN_POINT (超过此并发QPS开始下降)
 ${TURN_POINT:+建议生产环境控制在 $TURN_POINT 并发以内}
 
-四、测试结论
+三、测试结论
 -------------------------------------------------------------------------------
 $(date '+%Y-%m-%d %H:%M:%S') 完成压测
 
@@ -269,6 +284,9 @@ $(date '+%Y-%m-%d %H:%M:%S') 完成压测
 ===============================================================================
 EOF
 
+# 清理临时文件
+rm -rf "$TEMP_DIR"
+
 # 清理测试环境（但不停止容器）
 echo -e "\n${YELLOW}清理测试环境...${NC}"
 docker exec im-gateway-$ENV pkill TCPserver 2>/dev/null || true
@@ -277,7 +295,7 @@ echo -e "\n${GREEN}✓ 测试完成！${NC}"
 echo -e "${BLUE}报告已保存至: $REPORT_FILE${NC}"
 echo -e "\n报告摘要:"
 echo "----------------------------------------"
-tail -n 15 $REPORT_FILE
+tail -n 20 $REPORT_FILE
 
 echo -e "\n${YELLOW}提示: 容器仍在运行，可以继续使用:${NC}"
 echo "  docker exec -it im-gateway-$ENV bash"
