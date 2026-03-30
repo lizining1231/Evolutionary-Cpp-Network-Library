@@ -28,9 +28,9 @@ int Socket::getServer_fd() const{
     return server_fd;
 }
 
-std::string& Socket::getRecv_buffer(){    // handleClient()要修改该成员变量，所以采取引用
+/*std::string& Socket::getRecv_buffer(){    // handleClient()要修改该成员变量，所以采取引用
     return recv_buffer;
-}
+}*/
 
 void Socket::initSocket(int port){
     // 设置套接字
@@ -66,7 +66,6 @@ void Socket::initSocket(int port){
 }
 
 
-
 void Socket::cleanupServer(){
      if(server_fd>=0){
         shutdown(server_fd, SHUT_WR);// 发送FIN
@@ -77,6 +76,22 @@ void Socket::cleanupServer(){
     }
 }
 
+void Buffer::appendData(const char*data,ssize_t length){
+    recv_buffer.append(data,length);
+}
+
+bool Buffer::takeData(std::string& request,const std::string& delimeter){
+    size_t pos=recv_buffer.find(delimeter);
+        
+    if(pos==std::string::npos){
+        false; // 如果没找到字符串就返回false，调用层进行处理  
+    }
+    else{
+        std::string request=recv_buffer.substr(0,pos+4);
+        recv_buffer.erase(0,pos+4);
+        true;
+    }
+}
 
 // TCPServer类的实现
 TCPServer::TCPServer(int port):socket(port),port(port){
@@ -125,7 +140,7 @@ void TCPServer::eventLoop(){
             }
         }
     }       
-    cleanupClient(); 
+
 }
 
 
@@ -165,14 +180,12 @@ void TCPServer::handleClientData(int client_fd){
     // char buffer[BUFFER_SIZE];取消通用连接池，并且BUFFER_SIZE变更为RECV_BUFSIZE
 
     char temp_buffer[4096];
-    std::string& recv_buffer=socket.getRecv_buffer();
-    ssize_t bytes_read;
-    size_t pos;
 
+    ssize_t bytes_read;
+    
     bytes_read=recv(client_fd,temp_buffer,sizeof(temp_buffer),0);
 
     if(bytes_read<=0){
-
         if(bytes_read==0){
             std::cout<<"Client disconnected"<<std::endl;
         }
@@ -201,31 +214,21 @@ void TCPServer::handleClientData(int client_fd){
         return;
     }
 
-    
-    recv_buffer.append(temp_buffer,bytes_read);    // 为进行职责分离，将临时缓冲区的数据追加到永久缓冲区，永久缓冲区负责处理
-
-    pos=recv_buffer.find('\r\n\r\n');
-
-    if(pos==std::string::npos){
-        return;    // 如果没找到字符串直接返回继续等待请求
-    }
-    else{
-
-        std::string request=recv_buffer.substr(0,pos+4);
- // 依赖反转
-        // recv_buffer[bytes_read] = '\0';
-
+    std::string request;
+    recv_buffer.appendData(temp_buffer,bytes_read);   // 为进行职责分离，将临时缓冲区的数据追加到永久缓冲区，永久缓冲区负责处理
+  
+    for(int request_count=0;request_count<5;request_count++){// 用while会导致调度不均，我们这里控制每次处理的请求量request_count为5个
+        
+        if(!recv_buffer.takeData(request,"\r\n\r\n")){
+            break;
+        }
+        // 依赖反转
         std::string response=handleMessage(request.c_str(),bytes_read);
 
         if(send(client_fd, response.c_str(), response.length(), 0)<0){
-        std::cerr<<" send error"<<std::endl;
+            std::cerr<<" send error"<<std::endl;
         }
-
-        recv_buffer.erase(0,pos+4);
-
-        std::cout<<"recv num: "<<bytes_read<<std::endl;
-    }
-
+    }   
 }
 
 

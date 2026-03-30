@@ -14,12 +14,12 @@ class Socket{
     explicit Socket(int port);    // ?
     ~Socket();
     int getServer_fd() const;
-    std::string& getRecv_buffer();
+
     
 
     private:
     int server_fd;
-    std::string recv_buffer;
+
     void initSocket(int port);
     void cleanupServer();
 
@@ -37,10 +37,21 @@ class Socket{
     
 };*/
 
+class Buffer{
+    public:
+    // 这里我们先不实现构造函数，用编译器默认的，因为变量成员只有一个string类的recv_buffer，编译器生成的够用
+    void appendData(const char*data,ssize_t length);// 给我一个temp缓冲区和一个bytes_read，我会把数据追加到我们的recv_buffer里面
+    bool takeData(std::string& request,const std::string& delimeter);    // 给我
+    
+    private:
+    std::string recv_buffer;
+};
+
 class TCPServer{ 
     public:
     TCPServer(int port);
     ~TCPServer();
+
     //void start();
     void eventLoop();
 
@@ -53,6 +64,7 @@ class TCPServer{
     int max_fd;
     int server_fd;
     std::vector<int> client_fds;
+    Buffer recv_buffer;
 
 
     int acceptClient();
