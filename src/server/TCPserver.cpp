@@ -13,10 +13,22 @@
 #include <algorithm>
 #include <sys/time.h>
 #include <string>
+#include <map>
+feat(server): 实现Connection类的基础，并实现三个类的分层设计
+
+Issue: Buffer类实现后并没有真正的实现每个连接配置一个缓冲区的概念，P99仍然剧烈波动在10ms-1000ms，
+连续20轮间歇测试中出现3轮P99恢复11ms左右的现象，其余均为1000ms。
+
+Change: 
+1. 创建Connection类，实现用于map创建索引的默认构造函数与用于初始化client_fd的参数构造函数
+2. 创建一个map<int,Connection>connections，建立client_fd与Connection的一一对应关系
+3. 修改recv_buffer.append()等调用链，使得connections作为TCPServer的成员，buffer作为Connection的成员
+
+result: P99依然未得到缓解
 
 #define BACKLOG 128
 
-Socket::Socket(int port):server_fd(-1){
+Socket::Socket(int port):server_fd(-1){    // 当initSocket失败，server_fd=-1
     initSocket(port);
 }
 
@@ -84,18 +96,21 @@ bool Buffer::takeData(std::string& request,const std::string& delimeter){
     size_t pos=recv_buffer.find(delimeter);
         
     if(pos==std::string::npos){
-        false; // 如果没找到字符串就返回false，调用层进行处理  
+        return false; // 如果没找到字符串就返回false，调用层进行处理  
     }
     else{
         std::string request=recv_buffer.substr(0,pos+4);
         recv_buffer.erase(0,pos+4);
-        true;
+        return true;
     }
 }
 
+Connection::Connection(int client_fd):client_fd(client_fd){}
+Connection::Connection(){}    // 当map找不到key值时会利用此默认构造函数来创建
+
 // TCPServer类的实现
 TCPServer::TCPServer(int port):socket(port),port(port){
-    int client_fd=-1;
+    int client_fd=-1;   // 局部变量，随构造函数结束而结束
     
     std::cout<<"the initialized TCP server on port"<<port<<std::endl;
 }
@@ -142,7 +157,6 @@ void TCPServer::eventLoop(){
     }       
 
 }
-
 
 
 int TCPServer::acceptClient(){
@@ -215,11 +229,11 @@ void TCPServer::handleClientData(int client_fd){
     }
 
     std::string request;
-    recv_buffer.appendData(temp_buffer,bytes_read);   // 为进行职责分离，将临时缓冲区的数据追加到永久缓冲区，永久缓冲区负责处理
+    connections[client_fd].recv_buffer.appendData(temp_buffer,bytes_read);   // 为进行职责分离，将临时缓冲区的数据追加到永久缓冲区，永久缓冲区负责处理
   
     for(int request_count=0;request_count<5;request_count++){// 用while会导致调度不均，我们这里控制每次处理的请求量request_count为5个
         
-        if(!recv_buffer.takeData(request,"\r\n\r\n")){
+        if(!connections[client_fd].recv_buffer.takeData(request,"\r\n\r\n")){
             break;
         }
         // 依赖反转

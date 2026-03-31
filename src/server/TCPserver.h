@@ -5,6 +5,7 @@
 #include<unistd.h>
 #include<string>
 #include<vector>
+#include<map>
 // 为什么类里面把public放前面，private里面声明变量放后面
 // 编译的时候不应该先定义声明变量吗？不会出错吗
 
@@ -47,6 +48,14 @@ class Buffer{
     std::string recv_buffer;
 };
 
+class Connection{
+    public:
+    int client_fd;
+    Buffer recv_buffer;
+    Connection(int client_fd);
+    Connection();
+};
+
 class TCPServer{ 
     public:
     TCPServer(int port);
@@ -61,11 +70,11 @@ class TCPServer{
 
     fd_set all_fds;
     fd_set read_fds;
+
     int max_fd;
     int server_fd;
     std::vector<int> client_fds;
-    Buffer recv_buffer;
-
+    std::map<int,Connection>connections;    // 一个fd对应一个连接
 
     int acceptClient();
     void handleClientData(int client_fd);
