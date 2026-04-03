@@ -6,6 +6,8 @@
 #include<string>
 #include<vector>
 #include<map>
+//#include<functional>
+
 // 为什么类里面把public放前面，private里面声明变量放后面
 // 编译的时候不应该先定义声明变量吗？不会出错吗
 
@@ -64,6 +66,12 @@ class TCPServer{
     //void start();
     void eventLoop();
 
+    /*using MessageCallback=std::function<std::string (char const* msg,ssize_t len)>;
+    void setMessageCallback(MessageCallback cb);*/
+    
+    using MessageCallback=std::string (*)(char const* msg,ssize_t len);
+    void setMessageCallback(MessageCallback cb);
+
     private:
     int port;
     Socket socket;
@@ -78,8 +86,9 @@ class TCPServer{
 
     int acceptClient();
     void handleClientData(int client_fd);
-    std::string handleMessage(const char* buffer, ssize_t bytes_read);
+    // std::string handleMessage(const char* buffer, ssize_t bytes_read);
     void cleanupClient();
+    MessageCallback handler;
 
 };
 
