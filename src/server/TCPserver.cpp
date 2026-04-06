@@ -15,36 +15,35 @@
 #include <string>
 #include <map>
 
-
 #define BACKLOG 128
 
-Socket::Socket(int port):server_fd(-1){    // 当initSocket失败, server_fd=-1
+SocketListener::SocketListener(int port):listen_fd_(-1){    // 当initSocket失败, listen_fd_=-1
     initSocket(port);
 }
 
-Socket::~Socket(){
-    cleanupServer();
+SocketListener::~SocketListener(){
+    close();
 }
 
-int Socket::getServer_fd() const{
-    return server_fd;
+int SocketListener::getFd() const{
+    return listen_fd_;
 }
 
-/*std::string& Socket::getRecv_buffer(){    // handleClient()要修改该成员变量, 所以采取引用
+/*std::string& SocketListener::getRecv_buffer(){    // handleClient()要修改该成员变量, 所以采取引用
     return recv_buffer;
 }*/
 
-void Socket::initSocket(int port){
+void SocketListener::initSocket(int port){
     // 设置套接字
-    server_fd=socket(AF_INET,SOCK_STREAM,0);
+    listen_fd_=socket(AF_INET,SOCK_STREAM,0);
    
-    if(server_fd<0){
+    if(listen_fd_<0){
         throw std::runtime_error("Socket creation failed");
     }
     
     // 设置套接字选项
     int opt=1;
-    if(setsockopt(server_fd,SOL_SOCKET,SO_REUSEADDR,&opt,sizeof(opt))<0){
+    if(setsockopt(listen_fd_,SOL_SOCKET,SO_REUSEADDR,&opt,sizeof(opt))<0){
         throw std::runtime_error("Setsocketopt failed");
     }
 
@@ -54,12 +53,12 @@ void Socket::initSocket(int port){
     server_addr.sin_addr.s_addr=INADDR_ANY;
     server_addr.sin_port=htons(port);
 
-    if(bind(server_fd,(sockaddr*)&server_addr,sizeof(server_addr))<0){
+    if(bind(listen_fd_,(sockaddr*)&server_addr,sizeof(server_addr))<0){
         throw std::runtime_error("Bind failed");
     }
     
     //监听
-    if(listen(server_fd,BACKLOG)<0){
+    if(listen(listen_fd_,BACKLOG)<0){
         throw std::runtime_error("Listen failed");
     }
 
@@ -68,15 +67,16 @@ void Socket::initSocket(int port){
 }
 
 
-void Socket::cleanupServer(){
-     if(server_fd>=0){
-        shutdown(server_fd, SHUT_WR);// 发送FIN
+void SocketListener::close(){
+     if(listen_fd_>=0){
+        shutdown(listen_fd_, SHUT_WR);// 发送FIN
 
-        close(server_fd);
+        ::close(listen_fd_);
 
-        server_fd=-1;
+        listen_fd_=-1;
     }
 }
+
 
 void Buffer::appendData(const char*data,ssize_t length){
     recv_buffer.append(data,length);
@@ -99,7 +99,7 @@ Connection::Connection(int client_fd):client_fd(client_fd){}
 Connection::Connection(){}    // 当map找不到key值时会利用此默认构造函数来创建
 
 // TCPServer类的实现
-TCPServer::TCPServer(int port):socket(port),port(port){
+TCPServer::TCPServer(int port):listener(port),port(port){
     int client_fd=-1;   // 局部变量, 随构造函数结束而结束
     
     std::cout<<"the initialized TCP server on port"<<port<<std::endl;
@@ -113,12 +113,12 @@ void TCPServer::setMessageCallback(MessageCallback handleMessage){
 
 void TCPServer::eventLoop(){
 
-    server_fd=socket.getServer_fd();
+    int listen_fd=listener.getFd();
 
     FD_ZERO(&all_fds);
-    FD_SET(server_fd,&all_fds);
+    FD_SET(listen_fd,&all_fds);
 
-    max_fd=server_fd;
+    max_fd=listen_fd;
     
     std::cout<<"Waiting for client connection..."<<std::endl;
 
@@ -138,8 +138,8 @@ void TCPServer::eventLoop(){
         continue;
         }
 
-    if(FD_ISSET(server_fd,&read_fds)){
-        acceptClient();
+    if(FD_ISSET(listen_fd,&read_fds)){
+        accept();
         }
 
     for(int fd:client_fds){
@@ -152,13 +152,14 @@ void TCPServer::eventLoop(){
 }
 
 
-
-int TCPServer::acceptClient(){
+int TCPServer::accept(){
+    int listen_fd=listener.getFd();
+    
     sockaddr_in client_addr{};
     socklen_t client_len=sizeof(client_addr);
 
     //客户端的client_fd作为局部变量, 每个连接独立管理, 互不干扰
-    int client_fd=accept(server_fd,(sockaddr*)&client_addr,&client_len);
+    int client_fd=::accept(listen_fd,(sockaddr*)&client_addr,&client_len);
 
     if(client_fd<0){
         throw std::runtime_error(
@@ -184,7 +185,9 @@ int TCPServer::acceptClient(){
 }
 
 
+
 void TCPServer::handleClientData(int client_fd){
+    int listen_fd=listener.getFd();
     // char buffer[BUFFER_SIZE];取消通用连接池, 并且BUFFER_SIZE变更为RECV_BUFSIZE
 
     char temp_buffer[4096];
@@ -203,7 +206,7 @@ void TCPServer::handleClientData(int client_fd){
         }
 
         // 清理资源并返回
-        close(client_fd);
+        ::close(client_fd);
         FD_CLR(client_fd,&all_fds);
         
         auto it=std::find(client_fds.begin(),client_fds.end(),client_fd);
@@ -214,7 +217,7 @@ void TCPServer::handleClientData(int client_fd){
         }
 
         if(client_fd==max_fd){
-            max_fd=server_fd;   //重置fd再遍历寻找最大值
+            max_fd=listen_fd;   //重置fd再遍历寻找最大值
             for(int fd:client_fds){
                 if(fd>max_fd)max_fd=fd;
             }
@@ -246,7 +249,7 @@ void TCPServer::handleClientData(int client_fd){
 
 void TCPServer::cleanupClient(){
     for(int fd:client_fds){
-        close(fd);
+        ::close(fd);
         FD_CLR(fd,&all_fds);
     }
     client_fds.clear();

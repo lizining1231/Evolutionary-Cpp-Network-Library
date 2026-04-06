@@ -6,48 +6,34 @@
 #include<string>
 #include<vector>
 #include<map>
-//#include<functional>
 
-// 为什么类里面把public放前面，private里面声明变量放后面
-// 编译的时候不应该先定义声明变量吗？不会出错吗
 
-    // 管理单个socket的申请与释放
-class Socket{
+class SocketListener{
     public:
-    explicit Socket(int port);    // ?
-    ~Socket();
-    int getServer_fd() const;
-
-    
+    explicit SocketListener(int port);
+    ~SocketListener();
+    int getFd() const;
+    //int accept();
+    void close();
 
     private:
-    int server_fd;
-
+    int listen_fd_;
     void initSocket(int port);
-    void cleanupServer();
 
-    Socket(const Socket&)=delete;// 禁止拷贝
-    Socket& operator=(const Socket&)=delete;
+    SocketListener(const SocketListener&)=delete;// 禁止拷贝
+    SocketListener& operator=(const SocketListener&)=delete;
 
-    // 加移动语义?
 };
-     // 连接池实现，管理多个socket
-     
-/*class socketPool{
-    public:
 
-    private:
-    
-};*/
 
 class Buffer{
     public:
-    // 这里我们先不实现构造函数，用编译器默认的，因为变量成员只有一个string类的recv_buffer，编译器生成的够用
-    void appendData(const char*data,ssize_t length);// 给我一个temp缓冲区和一个bytes_read，我会把数据追加到我们的recv_buffer里面
-    bool takeData(std::string& request,const std::string& delimeter);    // 给我
-    
+    void appendData(const char*data,ssize_t length);
+    bool takeData(std::string& request,const std::string& delimeter);
+
     private:
     std::string recv_buffer;
+
 };
 
 class Connection{
@@ -74,7 +60,7 @@ class TCPServer{
 
     private:
     int port;
-    Socket socket;
+    SocketListener listener;
 
     fd_set all_fds;
     fd_set read_fds;
@@ -84,13 +70,11 @@ class TCPServer{
     std::vector<int> client_fds;
     std::map<int,Connection>connections;    // 一个fd对应一个连接
 
-    int acceptClient();
+    int accept();
     void handleClientData(int client_fd);
-    // std::string handleMessage(const char* buffer, ssize_t bytes_read);
     void cleanupClient();
     MessageCallback handler;
 
 };
-
 
 #endif
