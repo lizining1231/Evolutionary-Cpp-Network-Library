@@ -27,20 +27,33 @@ class SocketListener{
 
 class SelectPoller{
     public:
-    SelectPoller();
-    ~SelectPoller();
+    explicit SelectPoller(int listen_fd);
+    ~SelectPoller()=default;
+    
+    void addFd(int client_fd);
+    void wait();
+    bool isReady(int fd)const;
+    
     private:
     int port;
     SocketListener listener;
-
     std::vector<int> client_fds;
 
     fd_set all_fds;
     fd_set read_fds;
     int max_fd;
 
-    int wait();
+
 };
+
+/*class EventLoop{
+    public:
+    void start();
+    void stop();
+    private:
+    
+};*/
+
 
 class Buffer{
     public:
@@ -72,19 +85,21 @@ class TCPServer{
 
     private:
     std::vector<int> client_fds;
+     
+    std::map<int,Connection>connections;    // 一个fd对应一个连接
+
+    void handleClientData(int client_fd);
+    void cleanupClient();
+    MessageCallback handler;
+
+    SocketListener listener;
+    SelectPoller poller;
 
     fd_set all_fds;
     fd_set read_fds;
     int max_fd;
-
-
-    std::map<int,Connection>connections;    // 一个fd对应一个连接
-
-    //int accept();
-    void handleClientData(int client_fd);
-    void cleanupClient();
-    MessageCallback handler;
-    SocketListener listener;
 };
 
 #endif
+
+

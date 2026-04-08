@@ -71,6 +71,20 @@ int SocketListener::accept(){
     socklen_t client_len = sizeof(client_addr);
 
     int client_fd=::accept(listen_fd_,(sockaddr*)&client_addr,&client_len);
+
+    if(client_fd<0){
+        throw std::runtime_error(
+            std::string("Accept failed:")+strerror(errno)
+        );
+    }
+
+    // 将二进制的IP地址转换成字符串
+    char client_ip[INET_ADDRSTRLEN];
+    inet_ntop(AF_INET,&client_addr.sin_addr,client_ip,INET_ADDRSTRLEN);
+
+    //将网络字节序转化为主机字节序
+    std::cout<<client_ip<<":"<<ntohs(client_addr.sin_port)<<"(fd:"<<client_fd<<")"<<std::endl;
+
     return client_fd;
 }
 
@@ -84,20 +98,17 @@ void SocketListener::close(){
     }
 }
 
-int SelectPoller::wait(){
-    int listen_fd=listener.getFd();
+// SocketListener类没有无参构造函数，这里添加显示构造
+SelectPoller::SelectPoller(int listen_fd):listener(listen_fd),max_fd(listen_fd){
 
-    sockaddr_in client_addr{};
-    socklen_t client_len = sizeof(client_addr);
+    FD_ZERO(&all_fds);
+    FD_SET(listen_fd,&all_fds);
     
-    //客户端的client_fd作为局部变量, 每个连接独立管理, 互不干扰
-    int client_fd=listener.accept();
+    std::cout<<"Waiting for client connection..."<<std::endl;
+}
 
-    if(client_fd<0){
-        throw std::runtime_error(
-            std::string("Accept failed:")+strerror(errno)
-        );
-    }
+void SelectPoller::addFd(int client_fd){
+
     if(client_fd>0){
         FD_SET(client_fd,&all_fds);   // 把新客户端加入被监听队伍
         client_fds.push_back(client_fd);
@@ -105,16 +116,28 @@ int SelectPoller::wait(){
     if(client_fd>max_fd){
         max_fd=client_fd;   // client_fd是递增的, 可以用来重新设置最大值
     }
+    return;
+}
 
-    // 将二进制的IP地址转换成字符串
-    char client_ip[INET_ADDRSTRLEN];
-    inet_ntop(AF_INET,&client_addr.sin_addr,client_ip,INET_ADDRSTRLEN);
+bool SelectPoller::isReady(int client_fd)const{
+    return FD_ISSET(client_fd,&read_fds);
+}
 
-    //将网络字节序转化为主机字节序
-    std::cout<<client_ip<<":"<<ntohs(client_addr.sin_port)<<"(fd:"<<client_fd<<")"<<std::endl;
+void SelectPoller::wait(){
+    read_fds=all_fds;
 
-    return client_fd;
+    timeval tv;
+    tv.tv_sec=0;
+    tv.tv_usec=1000;
+    
+    // 防止select阻塞导致P99飙升
+    int activity=select(max_fd+1,&read_fds,NULL,NULL,&tv);
 
+    if(activity<0){
+        throw std::runtime_error(std::string("select:")+strerror(errno));
+        }
+
+    return;
 }
 
 
@@ -139,7 +162,7 @@ Connection::Connection(int client_fd):client_fd(client_fd){}
 Connection::Connection(){}    // 当map找不到key值时会利用此默认构造函数来创建
 
 // TCPServer类的实现
-TCPServer::TCPServer(int port):listener(port){
+TCPServer::TCPServer(int port):listener(port),poller(listener.getFd()){
     std::cout<<"the initialized TCP server on port"<<port<<std::endl;
 }
 
@@ -152,40 +175,22 @@ void TCPServer::setMessageCallback(MessageCallback handleMessage){
 void TCPServer::eventLoop(){
     int listen_fd=listener.getFd();
 
-    FD_ZERO(&all_fds);
-    FD_SET(listen_fd,&all_fds);
-
-    max_fd=listen_fd;
-    
-    std::cout<<"Waiting for client connection..."<<std::endl;
-
     while(1){
-
-    read_fds=all_fds;
-
-    timeval tv;
-    tv.tv_sec=0;
-    tv.tv_usec=1000;
+    poller.wait();
     
-    // 防止select阻塞导致P99飙升
-    int activity=select(max_fd+1,&read_fds,NULL,NULL,&tv);
-
-    if(activity<0){
-        throw std::runtime_error(std::string("select:")+strerror(errno));
-        continue;
-        }
-
-    if(FD_ISSET(listen_fd,&read_fds)){
-        listener.accept();
-        }
-
-    for(int fd:client_fds){
-        if (FD_ISSET(fd, &read_fds)) {  // 检查这个fd是否有数据
-            handleClientData(fd);
+    //只检查 listen_fd 是否就绪，避免 wait() 内部遍历 0~max_fd
+    if(poller.isReady(listen_fd)){
+        int client_fd=listener.accept();
+        poller.addFd(client_fd);
+    }
+    // client_fds作为vector类型已经在addFd()里面被push_back过了，这里直接用
+    for(int client_fd:client_fds){
+          if (poller.isReady(client_fd)){
+            handleClientData(client_fd);
             }
         }
-    }       
 
+    }  
 }
 
 
@@ -237,7 +242,6 @@ void TCPServer::handleClientData(int client_fd){
         if(!connections[client_fd].recv_buffer.takeData(request,"\r\n\r\n")){
             break;
         }
-        
         // 依赖反转
         if (!handler) std::cout << "handler 为空!\n";
         
@@ -257,7 +261,5 @@ void TCPServer::cleanupClient(){
     }
     client_fds.clear();
     }
-
-
 
 
