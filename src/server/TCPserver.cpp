@@ -180,13 +180,13 @@ void TCPServer::eventLoop(){
     
     //只检查 listen_fd 是否就绪，避免 wait() 内部遍历 0~max_fd
     if(poller.isReady(listen_fd)){
-        int client_fd=listener.accept();
-        poller.addFd(client_fd);
+        int new_fd=listener.accept();
+        poller.addFd(new_fd);
     }
     // client_fds作为vector类型已经在addFd()里面被push_back过了，这里直接用
-    for(int client_fd:client_fds){
-          if (poller.isReady(client_fd)){
-            handleClientData(client_fd);
+    for(int fd:client_fds){
+          if (poller.isReady(fd)){
+            handleClientData(fd);
             }
         }
 
