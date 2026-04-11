@@ -97,20 +97,20 @@ SelectPoller::SelectPoller(int listen_fd):listen_fd_(listen_fd),max_fd(listen_fd
 
     FD_ZERO(&all_fds);
     FD_SET(listen_fd,&all_fds);
-    
-    std::cout<<"Waiting for client connection..."<<std::endl;
+
 }
 
 void SelectPoller::addFd(int client_fd){
-
-    if(client_fd>0){
-        FD_SET(client_fd,&all_fds);   // 把新客户端加入被监听队伍
+     if(client_fd>0){
         client_fds.push_back(client_fd);
-    }
-    if(client_fd>max_fd){
-        max_fd=client_fd;   // client_fd是递增的, 可以用来重新设置最大值
+        FD_SET(client_fd,&all_fds);   // 把新客户端加入被监听队伍
+
+        if(client_fd>max_fd){
+            max_fd=client_fd;   // client_fd是递增的, 可以用来重新设置最大值
+        }
     }
 }
+
 
 bool SelectPoller::isReady(int client_fd)const{
     return FD_ISSET(client_fd,&read_fds);
@@ -138,7 +138,6 @@ void SelectPoller::removeFd(int client_fd){
         
     auto it=std::find(client_fds.begin(),client_fds.end(),client_fd);
 
-        
     if(it!=client_fds.end()){
     client_fds.erase(it);   // 将此fd从vector中删除
     }
@@ -150,6 +149,8 @@ void SelectPoller::removeFd(int client_fd){
         }
     }
 }
+
+
 
 void SelectPoller::closeAllClients(){
     for(int fd:client_fds){
@@ -180,8 +181,34 @@ bool Buffer::takeData(std::string& request,const std::string& delimeter){
 Connection::Connection(int client_fd):client_fd(client_fd){}
 Connection::Connection(){}    // 当map找不到key值时会利用此默认构造函数来创建
 
+ConnectionManager::ConnectionManager(SelectPoller* poller):poller_(poller){}
+
+Connection* ConnectionManager::getconn(int client_fd){
+    auto it=connections_.find(client_fd);
+    if(it!=connections_.end()){
+        return &(it->second);
+    }
+    else{
+        return nullptr;
+    }
+}
+
+void ConnectionManager::add(int client_fd){
+    connections_.emplace(client_fd,client_fd);
+    poller_->addFd(client_fd);
+}
+
+void ConnectionManager::remove(int client_fd){
+    connections_.erase(client_fd);
+    poller_->removeFd(client_fd);
+}
+
 // TCPServer类的实现
-TCPServer::TCPServer(int port):listener(port),poller(listener.getFd()){
+TCPServer::TCPServer(int port):
+listener(port),
+poller(listener.getFd()),
+connmgr(&poller)
+{
     std::cout<<"the initialized TCP server on port"<<port<<std::endl;
 }
 
@@ -200,7 +227,7 @@ void TCPServer::eventLoop(){
     //只检查 listen_fd 是否就绪，避免 wait() 内部遍历 0~max_fd
     if(poller.isReady(listen_fd)){
         int new_fd=listener.accept();
-        poller.addFd(new_fd);
+        connmgr.add(new_fd);
     }
     // client_fds作为vector类型已经在addFd()里面被push_back过了，这里直接用
     for(int fd:poller.client_fds){
@@ -215,31 +242,37 @@ void TCPServer::eventLoop(){
 
 void TCPServer::handleClientData(int client_fd){
     int listen_fd=listener.getFd();
+    Connection* conn=connmgr.getconn(client_fd);
     // char buffer[BUFFER_SIZE];取消通用连接池, 并且BUFFER_SIZE变更为RECV_BUFSIZE
     char temp_buffer[4096];
     ssize_t bytes_read;
     
     bytes_read=recv(client_fd,temp_buffer,sizeof(temp_buffer),0);
-
     if(bytes_read<=0){
         if(bytes_read==0){
-            std::cout<<"news Client disconnected"<<std::endl;
+            std::cout<<"Client disconnected"<<std::endl;
         }
         else{
             std::cerr<<"Receive error"<<std::endl;
         }
         // 清理资源并返回
-        poller.removeFd(client_fd);
+        connmgr.remove(client_fd);
         return;
     }
 
     std::string request;
-    connections[client_fd].recv_buffer.appendData(temp_buffer,bytes_read);   // 为进行职责分离, 将临时缓冲区的数据追加到永久缓冲区, 永久缓冲区负责处理
+    //conn.connections[client_fd].recv_buffer.appendData();   // 为进行职责分离, 将临时缓冲区的数据追加到永久缓冲区, 永久缓冲区负责处理
+    if(conn){
+        conn->recv_buffer.appendData(temp_buffer,bytes_read);
+    }// 不用写else，因为如果没有conn什么都不用做
 
     // 用while(1)会导致调度不均, 我们这里控制每次处理的请求量request_count为5个
     for(int request_count=0;request_count<5;request_count++){
+         if (!conn) {
+            return;
+        }
 
-        if(!connections[client_fd].recv_buffer.takeData(request,"\r\n\r\n")){
+        if(!conn->recv_buffer.takeData(request,"\r\n\r\n")){
             break;
         }
         // 依赖反转

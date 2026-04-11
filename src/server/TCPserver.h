@@ -38,8 +38,8 @@ class SelectPoller{
     
     private:
     int port;
-    
     int listen_fd_;
+
     fd_set all_fds;
     fd_set read_fds;
     int max_fd;
@@ -74,6 +74,18 @@ class Connection{
     Connection();
 };
 
+class ConnectionManager{
+    public:
+    explicit ConnectionManager(SelectPoller* poller_);
+    Connection* getconn(int client_fd);    
+    void add(int client_fd);
+    void remove(int client_fd);
+    private:
+    std::map<int,Connection>connections_;    // 一个fd对应一个连接
+    SelectPoller* poller_;
+
+};
+
 class TCPServer{ 
     public:
     TCPServer(int port);
@@ -85,15 +97,11 @@ class TCPServer{
     void setMessageCallback(MessageCallback cb);
 
     private:
-     
-    std::map<int,Connection>connections;    // 一个fd对应一个连接
-
     void handleClientData(int client_fd);
-    
     MessageCallback handler;
-
     SocketListener listener;
     SelectPoller poller;
+    ConnectionManager connmgr;
 
 };
 
