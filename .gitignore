@@ -52,3 +52,6 @@ wrk_result/
 study_draft/
 temporary_scripts/
 benchmark_report/
+docs/TODO.md
+*.png
+study_draft/

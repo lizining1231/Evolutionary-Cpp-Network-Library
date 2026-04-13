@@ -7,6 +7,8 @@
 #include<vector>
 #include<map>
 
+class Connection;  // 前置声明
+class ConnectionManager;  // 因为有互相依赖
 
 class SocketListener{
     public:
@@ -66,14 +68,6 @@ class Buffer{
 
 };
 
-class Connection{
-    public:
-    int client_fd;
-    Buffer recv_buffer;
-    Connection(int client_fd);
-    Connection();
-};
-
 class ConnectionManager{
     public:
     explicit ConnectionManager(SelectPoller* poller_);
@@ -86,22 +80,43 @@ class ConnectionManager{
 
 };
 
-class TCPServer{ 
+class Connection{
     public:
-    TCPServer(int port);
-    ~TCPServer();
+    void handleClientData(int client_fd);
+    Connection(int client_fd);
+    Connection();    
 
-    void eventLoop();
+    using CloseCallback=void (*)(int fd,ConnectionManager* connmgr);
+    void setCloseCallback(CloseCallback close_cb,ConnectionManager* connmgr);    
     
     using MessageCallback=std::string (*)(char const* msg,ssize_t len);
     void setMessageCallback(MessageCallback cb);
 
     private:
-    void handleClientData(int client_fd);
+    int client_fd;
+    Buffer recv_buffer;
+    ConnectionManager* connmgr_;
+    CloseCallback close_cb_;    
     MessageCallback handler;
+};
+
+class TCPServer{ 
+    public:
+    TCPServer(int port);
+    ~TCPServer();
+
+    using MessageCallback=std::string (*)(char const* msg,ssize_t len);
+    void setMessageCallback(MessageCallback cb);
+
+    void eventLoop();
+    
+    private:
+    //void handleClientData(int client_fd);
+
     SocketListener listener;
     SelectPoller poller;
     ConnectionManager connmgr;
+    MessageCallback user_handler;
 
 };
 
