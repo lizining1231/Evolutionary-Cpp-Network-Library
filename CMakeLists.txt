@@ -12,10 +12,11 @@ add_executable(TCPserver
     src/server/TCPserver.cpp
 )
 
-# 包含目录
+# 包含目录 - 添加 include 目录
 target_include_directories(TCPserver PRIVATE  
     src
     src/server
+    include          # 添加这一行，让编译器能找到 TCPserver.h
 )
 
 # Linux系统库

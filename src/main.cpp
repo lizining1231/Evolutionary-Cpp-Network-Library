@@ -1,4 +1,4 @@
-#include "server/TCPserver.h"
+#include "TCPserver.h"
 #include <iostream>
 #include <cstdlib>
 #include <string>
