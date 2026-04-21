@@ -51,4 +51,79 @@ trade-off:
 
 决策反馈: 可以创建ConnectionManager维护map，但是一致性问题不能用这个方案解决，因为维护max_fd是需要遍历client_fds的，client_fds只能暂时属于SelectPoller，等日后替换为epoll模型这个问题得以被解决，再将client_fds这个vector归还给ConnectionManager类
 
+## 4月21日：未来必须替换 select 为 epoll
 
+### 痛点1：select 的O(n)扫描
+
+### 痛点2：select 1024 fd 限制
+
+### 痛点3：select 的 API 设计与上层架构不符合
+
+场景：在实现 ConnManager 和 SelectPoller 的职责分离时，遭遇了 select 的 max_fd 维护问题。
+
+分析：
+select 要求调用者传入当前监控的最大 fd 值。这个值的维护逻辑需要：
+1. 遍历所有活跃连接的 fd 列表
+2. 在连接增删时更新缓存
+
+无论将这份逻辑放在 ConnManager 还是 SelectPoller，都会导致：
+- 若放在 SelectPoller：Poller 被迫持有业务层的 fd 列表，职责过重
+- 若放在 ConnManager：ConnManager 被迫维护一个与 I/O 机制强相关的衍生数据，职责污染
+- 若两者共享：引入不必要的生命周期耦合和状态同步风险
+
+这不是设计问题，是 select 的 API 缺陷。
+
+epoll 在内核维护事件表，epoll_wait() 无需 max_fd 参数，天然不存在此问题。
+
+### 痛点4：select 的遍历需求导致封装泄漏
+
+场景：在实现 `TCPServer::eventLoop` 时，需要遍历所有活跃的 fd，逐个检查是否就绪：
+
+```cpp
+for (int fd : poller.client_fds) {      // ← 被迫公开 client_fds
+    if (poller.isReady(fd)) {
+        handleClientData(fd);
+    }
+}
+```
+分析：
+导致此矛盾的原因：
+
+| 根本原因 | 说明 |
+| :--- | :--- |
+| select 的返回机制 | `select()` 返回后只修改 `fd_set` 位图，**不返回就绪 fd 列表** |
+| 轮询检查 | 调用者必须遍历所有可能的 fd，用 `FD_ISSET` 逐个询问 |
+| 列表归属问题 | 这个"所有可能的 fd"列表，天然属于 I/O 复用器（`SelectPoller`），但遍历需求来自上层（`TCPServer`） |
+| 封装泄漏 | 为了让上层能遍历，`SelectPoller` 被迫将内部数据 `client_fds_` 暴露为 `public` |
+
+为什么这是 select 特有的问题： 
+
+| 对比项 | select | epoll |
+| :--- | :--- | :--- |
+| 事件等待 | `select(max_fd+1, &read_fds, ...)` | `epoll_wait(epfd, events, MAX, timeout)` |
+| 就绪 fd 获取方式 | 遍历所有 fd，逐个 `FD_ISSET` | `events[i].data.fd` 直接获取 |
+| 是否需要维护 fd 列表 | 必须，用于遍历 | 不需要，内核维护 |
+| 封装性 | 泄漏，被迫暴露列表 | 完好，无内部列表需暴露 |
+
+决策：
+**临时妥协**
+
+当前阶段容忍 `client_fds_` 的 `public` 暴露，以优先跑通核心逻辑。
+
+待 `ConnManager` 完善后，将改为**方案二**：`SelectPoller::wait()` 直接返回就绪 fd 列表，届时 `client_fds_` 可恢复为 `private`。
+
+**未来改动**
+
+引入 `EpollPoller` 后：
+
+- `SelectPoller` 整体删除
+- `client_fds_` 随之消失
+- `max_fd` 随之消失
+- `FD_ISSET` 轮询随之消失
+- 遍历需求彻底消灭
+
+
+### 结论
+
+当前阶段容忍 select 带来的架构妥协，将 max_fd 计算逻辑临时放置在 ConnManager 中。
+未来引入 EpollPoller 时，该部分代码将作为"select 专属技术债"被整体移除。
