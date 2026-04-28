@@ -14,6 +14,7 @@
 #include <sys/time.h>
 #include <string>
 #include <map>
+#include <csignal>
 
 #define BACKLOG 128
 
@@ -49,7 +50,7 @@ void SocketListener::initSocket(int port){
     server_addr.sin_addr.s_addr=INADDR_ANY;
     server_addr.sin_port=htons(port);
 
-    if((listen_fd_,(sockaddr*)&server_addr,sizeof(server_addr))<0){
+    if(bind(listen_fd_,(sockaddr*)&server_addr,sizeof(server_addr))<0){
         throw std::runtime_error("Bind failed");
     }
     
@@ -283,6 +284,7 @@ poller(listener.getFd()),
 connmgr(&poller),
 delimeter_("")
 {
+    signal(SIGPIPE,SIG_IGN);    // 防止Fin包未收到时send数据导致进程被砍
     std::cout<<"the initialized TCP server on port"<<port<<std::endl;
 }
 
