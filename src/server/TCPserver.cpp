@@ -49,7 +49,7 @@ void SocketListener::initSocket(int port){
     server_addr.sin_addr.s_addr=INADDR_ANY;
     server_addr.sin_port=htons(port);
 
-    if(bind(listen_fd_,(sockaddr*)&server_addr,sizeof(server_addr))<0){
+    if((listen_fd_,(sockaddr*)&server_addr,sizeof(server_addr))<0){
         throw std::runtime_error("Bind failed");
     }
     
@@ -319,8 +319,10 @@ void EventLoop::start(){
     }
     // client_fds作为vector类型已经在addFd()里面被push_back过了，这里直接用
 
+    // 拷贝一份临时vector，防止recv出错导致vector在遍历时被删除元素
+    std::vector<int>copy_fds=poller.client_fds;
 
-    for(int fd:poller.client_fds){
+    for(int fd:copy_fds){
           if (poller.isReady(fd)){
             
             Connection* conn=connmgr.getconn(fd);
