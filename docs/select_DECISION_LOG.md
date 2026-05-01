@@ -127,3 +127,7 @@ for (int fd : poller.client_fds) {      // ← 被迫公开 client_fds
 
 当前阶段容忍 select 带来的架构妥协，将 max_fd 计算逻辑临时放置在 ConnManager 中。
 未来引入 EpollPoller 时，该部分代码将作为"select 专属技术债"被整体移除。
+
+迭代器失效，不得不复制一份vector专门用于遍历，再次多了一份开销
+
+max+1，额外的心智负担

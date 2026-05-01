@@ -6,7 +6,7 @@
 #include <stdexcept>
 #include <cerrno>
 #include <netinet/tcp.h>
-#include <sys/select.h>
+#include <sys/epoll.h>
 #include <sys/time.h>
 #include <sys/socket.h>
 #include <vector> 
@@ -94,70 +94,54 @@ void SocketListener::close(){
 }
 
 // SocketListener类没有无参构造函数，这里添加显示构造
-SelectPoller::SelectPoller(int listen_fd):listen_fd_(listen_fd),max_fd(listen_fd){
-    FD_ZERO(&all_fds);
-    FD_SET(listen_fd,&all_fds);
+SelectPoller::SelectPoller(int listen_fd):listen_fd_(listen_fd){
+    epoll_fd_=epoll_create1(0);
+
+    struct epoll_event ev;
+    ev.events=EPOLLIN;
+    ev.data.fd=listen_fd;
+    epoll_ctl(epoll_fd_,EPOLL_CTL_ADD,listen_fd,&ev);
 
 }
 
 void SelectPoller::addFd(int client_fd){
-    if(client_fd>0){
-        client_fds.push_back(client_fd);
-        FD_SET(client_fd,&all_fds);   // 把新客户端加入被监听队伍
 
-        if(client_fd>max_fd){
-            max_fd=client_fd;   // client_fd是递增的, 可以用来重新设置最大值
-        }
-    }
+    struct epoll_event ev;
+    ev.events=EPOLLIN;
+    ev.data.fd=client_fd;
+    epoll_ctl(epoll_fd_,EPOLL_CTL_ADD,client_fd,&ev);
+
 }
 
-
-bool SelectPoller::isReady(int client_fd)const{
-    return FD_ISSET(client_fd,&read_fds);
-}
 
 void SelectPoller::wait(){
-    read_fds=all_fds;
 
-    timeval tv;
-    tv.tv_sec=0;
-    tv.tv_usec=1000;
-    
-    // 防止select阻塞导致P99飙升
-    int activity=select(max_fd+1,&read_fds,NULL,NULL,&tv);
+    ready_count_=epoll_wait(epoll_fd_,events_,MAX_EVENTS,1);
 
-    if(activity<0){
-        throw std::runtime_error(std::string("select:")+strerror(errno));
+    if(ready_count_<0){
+        throw std::runtime_error(std::string("epoll_wait:")+strerror(errno));
         }
         
 }
 
 void SelectPoller::removeFd(int client_fd){
     ::close(client_fd);
-    FD_CLR(client_fd,&all_fds);
-        
-    auto it=std::find(client_fds.begin(),client_fds.end(),client_fd);
+ 
+    struct epoll_event ev;
+    ev.events=EPOLLIN;
+    ev.data.fd=client_fd;
+    epoll_ctl(epoll_fd_,EPOLL_CTL_DEL,client_fd,&ev);
 
-    if(it!=client_fds.end()){
-    client_fds.erase(it);   // 将此fd从vector中删除
-    }
-
-    if(client_fd==max_fd){
-        max_fd=listen_fd_;   //重置fd再遍历寻找最大值
-        for(int fd:client_fds){
-            if(fd>max_fd)max_fd=fd;
-        }
-    }
 }
 
-void SelectPoller::closeAllClients(){
+/*void SelectPoller::closeAllClients(){
     for(int fd:client_fds){
         ::close(fd);
         FD_CLR(fd,&all_fds);
     }
     client_fds.clear();
     }
- 
+*/
 
 void Buffer::appendData(const char*data,ssize_t len){
     recv_buffer.append(data,len);
@@ -305,44 +289,38 @@ void EventLoop::start(){
     running_=true;
 
     while(running_){
-    poller.wait();
-    
-    //只检查 listen_fd 是否就绪，避免 wait() 内部遍历 0~max_fd
-    if(poller.isReady(listen_fd)){
+
+        poller.wait();
+ 
+        for(int i=0;i<poller.ready_count_;i++){
+        int fd=poller.events_[i].data.fd;
+
+            if(fd==listen_fd){
+
+                int new_fd=listener.accept();
+                connmgr.add(new_fd);
+                Connection* conn=connmgr.getconn(new_fd);
         
-        int new_fd=listener.accept();
-        connmgr.add(new_fd); 
-
-        Connection* conn=connmgr.getconn(new_fd);
-        
-        conn->setMessageCallback(user_handler);
-        conn->setCloseCallback(onConnectionClose, &connmgr);
-        conn->setDelimeter(delimeter_);
-    }
-    // client_fds作为vector类型已经在addFd()里面被push_back过了，这里直接用
-
-    // 拷贝一份临时vector，防止recv出错导致vector在遍历时被删除元素
-    std::vector<int>copy_fds=poller.client_fds;
-
-    for(int fd:copy_fds){
-          if (poller.isReady(fd)){
-            
-            Connection* conn=connmgr.getconn(fd);
-            
-            if(conn==nullptr){
-                continue;
+                conn->setMessageCallback(user_handler);
+                conn->setCloseCallback(onConnectionClose, &connmgr);
+                conn->setDelimeter(delimeter_);
             }
+            else{
+                Connection* conn=connmgr.getconn(fd);
+            
+                if(conn==nullptr){
+                    continue;
+                }
 
-            conn->recv(fd);
+                conn->recv(fd);
 
-            conn = connmgr.getconn(fd);            // 防止recv失败后send读到野指针
-            if (conn == nullptr) continue;      
+                conn = connmgr.getconn(fd);            // 防止recv失败后send读到野指针
+                if (conn == nullptr) continue;   
 
-            conn->send(fd);
+                conn->send(fd);
             }
         }
-
-    }  
+    }
 }
 
 void EventLoop::stop(){

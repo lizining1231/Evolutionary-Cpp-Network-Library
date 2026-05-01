@@ -6,6 +6,7 @@
 #include<string>
 #include<vector>
 #include<map>
+#include<sys/epoll.h>
 class Connection;  // 前置声明
 class ConnectionManager;  // 因为有互相依赖
 
@@ -33,22 +34,21 @@ class SelectPoller{
     public:
     explicit SelectPoller(int listen_fd);
     ~SelectPoller()=default;
-    std::vector<int> client_fds;
     void addFd(int client_fd);
     void wait();
-    bool isReady(int fd)const;
+    //bool isReady(int fd)const;
+    int getReadyFd(int index);
     void removeFd(int client_fd);
-    void closeAllClients();
+    //void closeAllClients();
+    static const int MAX_EVENTS=64;
+    struct epoll_event events_[MAX_EVENTS];
+    int ready_count_;
     
     private:
     int port;
     int listen_fd_;
-
-    fd_set all_fds;
-    fd_set read_fds;
-    int max_fd;
-
-
+    int epoll_fd_;
+    
 };
 
 class Buffer{
