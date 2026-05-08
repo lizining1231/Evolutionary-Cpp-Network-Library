@@ -14,7 +14,7 @@ std::string handleMessage(char const* request,size_t len){     // 之后可以�
             "HTTP/1.1 200 OK\r\n"
             "Content-Type: Text/plain\r\n"
             "Content-Length: 12\r\n"
-            "Connection: close\r\n"
+            "Connection: keep-alive\r\n"
             "\r\n"
             "hello,world\n";
         }else{

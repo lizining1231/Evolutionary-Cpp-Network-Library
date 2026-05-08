@@ -134,14 +134,6 @@ void SelectPoller::removeFd(int client_fd){
 
 }
 
-/*void SelectPoller::closeAllClients(){
-    for(int fd:client_fds){
-        ::close(fd);
-        FD_CLR(fd,&all_fds);
-    }
-    client_fds.clear();
-    }
-*/
 
 void Buffer::appendData(const char*data,ssize_t len){
     recv_buffer.append(data,len);
@@ -211,11 +203,12 @@ void Connection::setDelimeter(const std::string& delim){
 }
 
 void Connection::recv(int client_fd){
+
     if(this == nullptr) {
         return;
     }
 
-    char temp_buffer[4096];
+    char temp_buffer[65536];
     ssize_t bytes_read;
     
     bytes_read=::recv(client_fd,temp_buffer,sizeof(temp_buffer),0);
@@ -240,21 +233,20 @@ void Connection::recv(int client_fd){
 
 void Connection::send(int client_fd){
     std::string request;
-    // 用while(1)会导致调度不均, 我们这里控制每次处理的请求量request_count为5个
-    for(int request_count=0;request_count<5;request_count++){
-         if (!this) {
-            return;
-        }
 
-        if(!this->recv_buffer.takeData(request,delimeter_)){
-            break;
+    while(recv_buffer.takeData(request,delimeter_)){    //循环直到无数据，打包发送到缓冲区
+
+        if(!handler){
+            std::cout << "handler 为空!\n";
+            continue;
         }
-        // 依赖反转
-        if (!handler) std::cout << "handler 为空!\n";
         
         std::string response=handler(request.c_str(), request.size());
         
         if(::send(client_fd, response.c_str(), response.length(), 0)<0){
+            if(errno==EAGAIN||errno==EWOULDBLOCK){
+                break;
+            }
             std::cerr<<" send error"<<std::endl;
         }
     }   
