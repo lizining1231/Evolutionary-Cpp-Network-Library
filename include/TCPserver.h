@@ -7,6 +7,7 @@
 #include<vector>
 #include<map>
 #include<sys/epoll.h>
+
 class Connection;  // 前置声明
 class ConnectionManager;  // 因为有互相依赖
 
@@ -40,7 +41,7 @@ class SelectPoller{
     int getReadyFd(int index);
     void removeFd(int client_fd);
     //void closeAllClients();
-    static const int MAX_EVENTS=64;
+    static const int MAX_EVENTS=4096;
     struct epoll_event events_[MAX_EVENTS];
     int ready_count_;
     
@@ -90,6 +91,7 @@ class Connection{
     private:
     
     std::string delimeter_;
+    std::string send_buffer;
     int client_fd;
     Buffer recv_buffer;
     ConnectionManager* connmgr_;

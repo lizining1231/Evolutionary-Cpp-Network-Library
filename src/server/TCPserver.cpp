@@ -15,6 +15,7 @@
 #include <string>
 #include <map>
 #include <csignal>
+#include <fcntl.h>
 
 #define BACKLOG 128
 
@@ -33,10 +34,13 @@ int SocketListener::getFd() const{
 void SocketListener::initSocket(int port){
     // 设置套接字
     listen_fd_=socket(AF_INET,SOCK_STREAM,0);
-   
+
     if(listen_fd_<0){
         throw std::runtime_error("Socket creation failed");
     }
+    
+    int old_flags=fcntl(listen_fd_,F_GETFL,0);
+    fcntl(listen_fd_,F_SETFL,old_flags | O_NONBLOCK);
     
     // 设置套接字选项
     int opt=1;
@@ -69,10 +73,18 @@ int SocketListener::accept(){
     int client_fd=::accept(listen_fd_,(sockaddr*)&client_addr,&client_len);
 
     if(client_fd<0){
+
+        if(errno==EAGAIN||errno==EWOULDBLOCK){
+            return -1;
+        }
+        
         throw std::runtime_error(
             std::string("Accept failed:")+strerror(errno)
         );
     }
+
+    int old_flags=fcntl(client_fd,F_GETFL,0);
+    fcntl(client_fd,F_SETFL,old_flags | O_NONBLOCK);
 
     // 将二进制的IP地址转换成字符串
     char client_ip[INET_ADDRSTRLEN];
@@ -212,16 +224,24 @@ void Connection::recv(int client_fd){
     ssize_t bytes_read;
     
     bytes_read=::recv(client_fd,temp_buffer,sizeof(temp_buffer),0);
+
     if(bytes_read<=0){
+
         if(bytes_read==0){
             std::cout<<"Client disconnected"<<std::endl;
+            close_cb_(client_fd,connmgr_);
+            return;
+        }else{
+            // bytes_read<0
+            if(errno==EAGAIN||errno==EWOULDBLOCK){
+                return;
+            }else{
+                std::cerr<<"Receive error"<<std::endl;
+                close_cb_(client_fd,connmgr_);
+                return;
+            }
         }
-        else{
-            std::cerr<<"Receive error"<<std::endl;
-        }
-        // 清理资源并返回
-        close_cb_(client_fd,connmgr_);
-        return;
+        
     }
 
     // 为进行职责分离, 将临时缓冲区的数据追加到永久缓冲区, 永久缓冲区负责处理
@@ -242,15 +262,24 @@ void Connection::send(int client_fd){
         }
         
         std::string response=handler(request.c_str(), request.size());
-        
-        if(::send(client_fd, response.c_str(), response.length(), 0)<0){
+
+        ssize_t n=::send(client_fd,response.c_str(),response.length(),0);
+
+        if(n>0){
+            response.erase(0,n);
+        }else{
+            // 
             if(errno==EAGAIN||errno==EWOULDBLOCK){
                 break;
+            }else{
+                std::cerr<<" send error"<<std::endl;
+                close_cb_(client_fd,connmgr_);
+                return;
             }
-            std::cerr<<" send error"<<std::endl;
         }
-    }   
-}
+
+    }     
+}   
 
 
 // EventLoop类的实现

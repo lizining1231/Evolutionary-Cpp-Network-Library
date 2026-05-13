@@ -31,5 +31,10 @@
 22. 拆分handleClient，拆分完之后把recv、send分配给connection而不是eventloop，eventloop只需要调用回调、recv、send
 23. 把所有空的构造/析构函数都写成default
 
-1. 用长连接打出1024限制
+~~1. 用长连接打出1024限制~~
 2. 将IO模型替换为epoll ET，显示O(n)的劣势
+3. 把所有的成员变量都加上下划线后缀
+
+现在：    events_ 公开，跑通
+下一步：  events_ 退回 private，Channel 回调
+再下一步：Poller 内部全自动，外面只调 poller.wait()
