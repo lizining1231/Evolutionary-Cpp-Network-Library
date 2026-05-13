@@ -1,120 +1,116 @@
 #ifndef TCPSERVER_H
 #define TCPSERVER_H
 
-#include<sys/types.h>
-#include<unistd.h>
-#include<string>
-#include<vector>
-#include<map>
-#include<sys/epoll.h>
+#include <sys/epoll.h>
+#include <sys/types.h>
+#include <unistd.h>
 
-class Connection;  // 前置声明
-class ConnectionManager;  // 因为有互相依赖
+#include <map>
+#include <string>
+#include <vector>
 
-using MessageCallback=std::string (*)(char const* msg,size_t len); 
-using CloseCallback=void (*)(int fd,ConnectionManager* connmgr);
+class Connection;        // 前置声明
+class ConnectionManager; // 因为有互相依赖
 
-class SocketListener{
-    public:
-    explicit SocketListener(int port);
-    ~SocketListener();
-    int getFd() const;
-    int accept();
-    void close();
+using MessageCallback = std::string (*)(char const *msg, size_t len);
+using CloseCallback = void (*)(int fd, ConnectionManager *connmgr);
 
-    private:
-    int listen_fd_;
-    void initSocket(int port);
+class SocketListener {
+public:
+  explicit SocketListener(int port);
+  ~SocketListener();
+  int getFd() const;
+  int accept();
+  void close();
 
-    SocketListener(const SocketListener&)=delete;// 禁止拷贝
-    SocketListener& operator=(const SocketListener&)=delete;
+private:
+  int listen_fd_;
+  void initSocket(int port);
 
+  SocketListener(const SocketListener &) = delete; // 禁止拷贝
+  SocketListener &operator=(const SocketListener &) = delete;
 };
 
-class SelectPoller{
-    public:
-    explicit SelectPoller(int listen_fd);
-    ~SelectPoller()=default;
-    void addFd(int client_fd);
-    void wait();
-    //bool isReady(int fd)const;
-    int getReadyFd(int index);
-    void removeFd(int client_fd);
-    //void closeAllClients();
-    static const int MAX_EVENTS=4096;
-    struct epoll_event events_[MAX_EVENTS];
-    int ready_count_;
-    
-    private:
-    int port;
-    int listen_fd_;
-    int epoll_fd_;
-    
+class SelectPoller {
+public:
+  explicit SelectPoller(int listen_fd);
+  ~SelectPoller() = default;
+  void addFd(int client_fd);
+  void wait();
+  // bool isReady(int fd)const;
+  int getReadyFd(int index);
+  void removeFd(int client_fd);
+  // void closeAllClients();
+  static const int MAX_EVENTS = 4096;
+  struct epoll_event events_[MAX_EVENTS];
+  int ready_count_;
+
+private:
+  int port;
+  int listen_fd_;
+  int epoll_fd_;
 };
 
-class Buffer{
-    public:
-    void appendData(const char*data,ssize_t length);
-    bool takeData(std::string& request,const std::string& delimeter);
+class Buffer {
+public:
+  void appendData(const char *data, ssize_t length);
+  bool takeData(std::string &request, const std::string &delimeter);
 
-    private:
-    std::string recv_buffer;
-
+private:
+  std::string recv_buffer;
 };
 
-class ConnectionManager{
-    public:
-    explicit ConnectionManager(SelectPoller* poller_);
-    Connection* getconn(int client_fd);    
-    void add(int client_fd);
-    void remove(int client_fd);
-    private:
-    std::map<int,Connection>connections_;    // 一个fd对应一个连接
-    SelectPoller* poller_;
+class ConnectionManager {
+public:
+  explicit ConnectionManager(SelectPoller *poller_);
+  Connection *getconn(int client_fd);
+  void add(int client_fd);
+  void remove(int client_fd);
 
+private:
+  std::map<int, Connection> connections_; // 一个fd对应一个连接
+  SelectPoller *poller_;
 };
 
-class Connection{
-    public:
-    void send(int client_fd);
-    void recv(int client_fd);
-    
-    Connection(int client_fd);
-    Connection();    
-    
-    void setMessageCallback(MessageCallback cb);
-    void setCloseCallback(CloseCallback close_cb,ConnectionManager* connmgr);    
-    
-    void setDelimeter(const std::string& delim);
+class Connection {
+public:
+  void send(int client_fd);
+  void recv(int client_fd);
 
+  Connection(int client_fd);
+  Connection();
 
-    private:
-    
-    std::string delimeter_;
-    std::string send_buffer;
-    int client_fd;
-    Buffer recv_buffer;
-    ConnectionManager* connmgr_;
-    CloseCallback close_cb_;    
-    MessageCallback handler;
+  void setMessageCallback(MessageCallback cb);
+  void setCloseCallback(CloseCallback close_cb, ConnectionManager *connmgr);
+
+  void setDelimeter(const std::string &delim);
+
+private:
+  std::string delimeter_;
+  std::string send_buffer;
+  int client_fd;
+  Buffer recv_buffer;
+  ConnectionManager *connmgr_;
+  CloseCallback close_cb_;
+  MessageCallback handler;
 };
 
-class EventLoop{
-    public:
-    EventLoop(int port);
-    ~EventLoop();
-    void start();
-    void stop();
-    void setMessageCallback(MessageCallback cb);
-    void setDelimeter(const std::string& delim);
-    private:
-    SocketListener listener;
-    SelectPoller poller;
-    ConnectionManager connmgr;
-    MessageCallback user_handler;
-    bool running_;
-    std::string delimeter_;
-};
+class EventLoop {
+public:
+  EventLoop(int port);
+  ~EventLoop();
+  void start();
+  void stop();
+  void setMessageCallback(MessageCallback cb);
+  void setDelimeter(const std::string &delim);
 
+private:
+  SocketListener listener;
+  SelectPoller poller;
+  ConnectionManager connmgr;
+  MessageCallback user_handler;
+  bool running_;
+  std::string delimeter_;
+};
 
 #endif
