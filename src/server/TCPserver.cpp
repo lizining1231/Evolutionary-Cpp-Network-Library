@@ -137,13 +137,13 @@ void SelectPoller::wait(){
 }
 
 void SelectPoller::removeFd(int client_fd){
-    ::close(client_fd);
- 
+
     struct epoll_event ev;
     ev.events=EPOLLIN;
     ev.data.fd=client_fd;
     epoll_ctl(epoll_fd_,EPOLL_CTL_DEL,client_fd,&ev);
-
+    
+    ::close(client_fd);
 }
 
 
