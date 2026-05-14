@@ -20,17 +20,11 @@
 
 #define BACKLOG 128
 
-SocketListener::SocketListener(int port) : listen_fd_(-1) {
-    initSocket(port);
-}
+SocketListener::SocketListener(int port) : listen_fd_(-1) { initSocket(port); }
 
-SocketListener::~SocketListener() {
-    close();
-}
+SocketListener::~SocketListener() { close(); }
 
-int SocketListener::getFd() const {
-    return listen_fd_;
-}
+int SocketListener::getFd() const { return listen_fd_; }
 
 void SocketListener::initSocket(int port) {
     // 设置套接字
@@ -45,7 +39,8 @@ void SocketListener::initSocket(int port) {
 
     // 设置套接字选项
     int opt = 1;
-    if (setsockopt(listen_fd_, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) < 0) {
+    if (setsockopt(listen_fd_, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) <
+        0) {
         throw std::runtime_error("Setsocketopt failed");
     }
 
@@ -55,7 +50,7 @@ void SocketListener::initSocket(int port) {
     server_addr.sin_addr.s_addr = INADDR_ANY;
     server_addr.sin_port = htons(port);
 
-    if (bind(listen_fd_, (sockaddr*)&server_addr, sizeof(server_addr)) < 0) {
+    if (bind(listen_fd_, (sockaddr *)&server_addr, sizeof(server_addr)) < 0) {
         throw std::runtime_error("Bind failed");
     }
 
@@ -70,15 +65,15 @@ int SocketListener::accept() {
     sockaddr_in client_addr{};
     socklen_t client_len = sizeof(client_addr);
 
-    int client_fd = ::accept(listen_fd_, (sockaddr*)&client_addr, &client_len);
+    int client_fd = ::accept(listen_fd_, (sockaddr *)&client_addr, &client_len);
 
     if (client_fd < 0) {
         if (errno == EAGAIN || errno == EWOULDBLOCK) {
             return -1;
         }
 
-        throw std::runtime_error(
-            std::string("Accept failed:") + strerror(errno));
+        throw std::runtime_error(std::string("Accept failed:") +
+                                 strerror(errno));
     }
 
     int old_flags = fcntl(client_fd, F_GETFL, 0);
@@ -89,14 +84,15 @@ int SocketListener::accept() {
     inet_ntop(AF_INET, &client_addr.sin_addr, client_ip, INET_ADDRSTRLEN);
 
     // 将网络字节序转化为主机字节序
-    std::cout << client_ip << ":" << ntohs(client_addr.sin_port) << "(fd:" << client_fd << ")" << std::endl;
+    std::cout << client_ip << ":" << ntohs(client_addr.sin_port)
+              << "(fd:" << client_fd << ")" << std::endl;
 
     return client_fd;
 }
 
 void SocketListener::close() {
     if (listen_fd_ >= 0) {
-        shutdown(listen_fd_, SHUT_WR);  // 发送FIN
+        shutdown(listen_fd_, SHUT_WR); // 发送FIN
         ::close(listen_fd_);
 
         listen_fd_ = -1;
@@ -137,15 +133,17 @@ void SelectPoller::removeFd(int client_fd) {
     ::close(client_fd);
 }
 
-void Buffer::appendData(const char* data, ssize_t len) {
+int SelectPoller::getEpoll_fd() { return epoll_fd_; }
+
+void Buffer::appendData(const char *data, ssize_t len) {
     recv_buffer.append(data, len);
 }
 
-bool Buffer::takeData(std::string& request, const std::string& delimeter) {
+bool Buffer::takeData(std::string &request, const std::string &delimeter) {
     size_t pos = recv_buffer.find(delimeter);
 
     if (pos == std::string::npos) {
-        return false;  // 如果没找到字符串就返回false, 调用层进行处理
+        return false; // 如果没找到字符串就返回false, 调用层进行处理
     } else {
         request = recv_buffer.substr(0, pos + 4);
         recv_buffer.erase(0, pos + 4);
@@ -153,17 +151,14 @@ bool Buffer::takeData(std::string& request, const std::string& delimeter) {
     }
 }
 
-Connection::Connection(int client_fd) : client_fd(client_fd) {
-}
+Connection::Connection(int client_fd) : client_fd(client_fd) {}
 
 // 当map找不到key值时会利用此默认构造函数来创建
-Connection::Connection() {
-}
+Connection::Connection() { poller_ = nullptr; }
 
-ConnectionManager::ConnectionManager(SelectPoller* poller) : poller_(poller) {
-}
+ConnectionManager::ConnectionManager(SelectPoller *poller) : poller_(poller) {}
 
-Connection* ConnectionManager::getconn(int client_fd) {
+Connection *ConnectionManager::getconn(int client_fd) {
     auto it = connections_.find(client_fd);
 
     if (it != connections_.end()) {
@@ -183,12 +178,13 @@ void ConnectionManager::remove(int client_fd) {
     poller_->removeFd(client_fd);
 }
 
-void Connection::setCloseCallback(CloseCallback close_cb, ConnectionManager* connmgr) {
+void Connection::setCloseCallback(CloseCallback close_cb,
+                                  ConnectionManager *connmgr) {
     close_cb_ = close_cb;
     connmgr_ = connmgr;
 }
 
-void onConnectionClose(int fd, ConnectionManager* connmgr) {
+void onConnectionClose(int fd, ConnectionManager *connmgr) {
     if (!connmgr) {
         return;
     }
@@ -199,9 +195,7 @@ void Connection::setMessageCallback(MessageCallback handleMessage) {
     handler = handleMessage;
 }
 
-void Connection::setDelimeter(const std::string& delim) {
-    delimeter_ = delim;
-}
+void Connection::setDelimeter(const std::string &delim) { delimeter_ = delim; }
 
 void Connection::recv(int client_fd) {
     if (this == nullptr) {
@@ -233,13 +227,16 @@ void Connection::recv(int client_fd) {
     // 为进行职责分离, 将临时缓冲区的数据追加到永久缓冲区, 永久缓冲区负责处理
     if (this) {
         this->recv_buffer.appendData(temp_buffer, bytes_read);
-    }  // 不用写else，因为如果没有conn什么都不用做
+    } // 不用写else，因为如果没有conn什么都不用做
 }
 
 void Connection::send(int client_fd) {
     std::string request;
+    int epoll_fd = poller_->getEpoll_fd();
+    bool is_need_restore = false;
 
-    while (recv_buffer.takeData(request, delimeter_)) {  // 循环直到无数据，打包发送到缓冲区
+    while (recv_buffer.takeData(
+        request, delimeter_)) { // 循环直到无数据，打包发送到缓冲区
 
         if (!handler) {
             std::cout << "handler 为空!\n";
@@ -247,15 +244,27 @@ void Connection::send(int client_fd) {
         }
 
         std::string response = handler(request.c_str(), request.size());
+        send_buffer.append(response);
+    }
 
-        ssize_t n = ::send(client_fd, response.c_str(), response.length(), 0);
+    while (!send_buffer.empty()) {
+        ssize_t n =
+            ::send(client_fd, send_buffer.c_str(), send_buffer.length(), 0);
 
         if (n > 0) {
-            response.erase(0, n);
+            send_buffer.erase(0, n);
         } else {
-            //
+            // n < 0
             if (errno == EAGAIN || errno == EWOULDBLOCK) {
-                break;
+
+                struct epoll_event ev;
+                ev.events = EPOLLIN | EPOLLOUT;
+                ev.data.fd = client_fd;
+                epoll_ctl(epoll_fd, EPOLL_CTL_MOD, client_fd, &ev);
+
+                is_need_restore = true;
+
+                return;
             } else {
                 std::cerr << " send error" << std::endl;
                 close_cb_(client_fd, connmgr_);
@@ -263,27 +272,31 @@ void Connection::send(int client_fd) {
             }
         }
     }
+
+    if (is_need_restore) {
+
+        struct epoll_event ev;
+        ev.events = EPOLLIN;
+        ev.data.fd = client_fd;
+        epoll_ctl(epoll_fd, EPOLL_CTL_MOD, client_fd, &ev);
+
+        is_need_restore = false;
+    }
 }
 
 // EventLoop类的实现
-EventLoop::EventLoop(int port) : listener(port),
-                                 poller(listener.getFd()),
-                                 connmgr(&poller),
-                                 delimeter_("") {
-    signal(SIGPIPE, SIG_IGN);  // 防止Fin包未收到时send数据导致进程被砍
+EventLoop::EventLoop(int port)
+    : listener(port), poller(listener.getFd()), connmgr(&poller),
+      delimeter_("") {
+    signal(SIGPIPE, SIG_IGN); // 防止Fin包未收到时send数据导致进程被砍
     std::cout << "the initialized TCP server on port" << port << std::endl;
 }
 
-EventLoop::~EventLoop() {
-}
+EventLoop::~EventLoop() {}
 
-void EventLoop::setMessageCallback(MessageCallback cb) {
-    user_handler = cb;
-}
+void EventLoop::setMessageCallback(MessageCallback cb) { user_handler = cb; }
 
-void EventLoop::setDelimeter(const std::string& delim) {
-    delimeter_ = delim;
-}
+void EventLoop::setDelimeter(const std::string &delim) { delimeter_ = delim; }
 
 void EventLoop::start() {
     int listen_fd = listener.getFd();
@@ -299,29 +312,40 @@ void EventLoop::start() {
             if (fd == listen_fd) {
                 int new_fd = listener.accept();
                 connmgr.add(new_fd);
-                Connection* conn = connmgr.getconn(new_fd);
+                Connection *conn = connmgr.getconn(new_fd);
 
                 conn->setMessageCallback(user_handler);
                 conn->setCloseCallback(onConnectionClose, &connmgr);
                 conn->setDelimeter(delimeter_);
+                conn->poller_ = &poller;
+
             } else {
-                Connection* conn = connmgr.getconn(fd);
+                uint32_t events = poller.events_[i].events;
+                Connection *conn = connmgr.getconn(fd);
 
                 if (conn == nullptr) {
                     continue;
                 }
 
-                conn->recv(fd);
+                if (events & EPOLLIN) {
+                    conn->recv(fd);
+                    conn = connmgr.getconn(fd); // 防止recv失败后send读到野指针
+                    if (conn == nullptr) {
+                        continue;
+                    }
+                    conn->send(fd);
+                }
 
-                conn = connmgr.getconn(fd);  // 防止recv失败后send读到野指针
-                if (conn == nullptr) continue;
-
-                conn->send(fd);
+                if (events & EPOLLOUT) {
+                    conn = connmgr.getconn(fd);
+                    if (conn == nullptr) {
+                        continue;
+                    }
+                    conn->send(fd);
+                }
             }
         }
     }
 }
 
-void EventLoop::stop() {
-    running_ = false;
-}
+void EventLoop::stop() { running_ = false; }
