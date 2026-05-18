@@ -83,6 +83,7 @@ cpu_freq_good.txt        # CPU 频率配置备份
 # ============================================
 wrk_result/              # wrk 性能测试结果
 study_draft/             # 学习草稿
+.study_draft/
 temporary_scripts/       # 临时脚本
 benchmark_report/        # 基准测试报告目录
 
@@ -95,4 +96,4 @@ docs/TODO.md             # 待办文档（如果不想提交）
 # ============================================
 # 可选：完全忽略所有 .txt 文件
 # （如果你确定不需要追踪任何 txt 文件，取消下面的注释）
-# *.txt
+# *.txt.study_draft/

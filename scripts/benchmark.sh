@@ -153,7 +153,6 @@ sleep 2
 echo -e "${YELLOW}[2/5] 基准测试 (100并发)${NC}"
 BASELINE=$(wrk -t$THREADS -c100 -d${DURATION}s --latency $URL 2>&1)
 echo "$BASELINE" | grep "Requests/sec" | awk '{print "  QPS: "$2}'
-echo "$BASELINE" >> $REPORT_FILE.tmp
 sleep 2
 
 # 3. 阶梯加压
@@ -164,17 +163,7 @@ CONCURRENCY=(100 200 400 600 800 1000 1200 1500)
 for CONN in "${CONCURRENCY[@]}"; do
     echo -e "${BLUE}--- 测试 $CONN 并发 ---${NC}"
     
-    # 如果是100并发，直接输出原始格式
-    if [ "$CONN" -eq 100 ]; then
-        echo -e "\n${GREEN}=== 100并发原始测试结果 ===${NC}"
-        wrk -t$THREADS -c$CONN -d${DURATION}s --latency $URL
-        echo -e "${GREEN}=============================${NC}\n"
-
-        OUTPUT=$(wrk -t$THREADS -c$CONN -d${DURATION}s --latency $URL 2>&1)
-    else
-         # 其他并发正常执行并捕获输出
-        OUTPUT=$(wrk -t$THREADS -c$CONN -d${DURATION}s --latency $URL 2>&1)
-    fi
+    OUTPUT=$(wrk -t$THREADS -c$CONN -d${DURATION}s --latency $URL 2>&1)
     
     # 提取数据
     QPS=$(echo "$OUTPUT" | grep "Requests/sec" | awk '{print $2}')
