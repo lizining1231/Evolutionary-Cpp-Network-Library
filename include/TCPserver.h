@@ -40,6 +40,9 @@ class SelectPoller {
     void removeFd(int client_fd);
     void wait();
 
+    void enableOut(int client_fd);
+    void disableOut(int client_fd);
+
     int getReadyFd(int index);
     int getEpoll_fd();
 
@@ -87,9 +90,6 @@ class Connection {
 
     void setDelimeter(const std::string &delim);
     SelectPoller *poller_;
-
-    uint64_t send_called = 0; // send() 被调用的总次数
-    uint64_t send_empty_called = 0; // send() 被调用但 send_buffer 为空 的次数
 
   private:
     std::string delimeter_;

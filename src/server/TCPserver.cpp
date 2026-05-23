@@ -133,6 +133,20 @@ void SelectPoller::removeFd(int client_fd) {
     ::close(client_fd);
 }
 
+void SelectPoller::enableOut(int client_fd) {
+    struct epoll_event ev;
+    ev.events = EPOLLIN | EPOLLOUT;
+    ev.data.fd = client_fd;
+    epoll_ctl(epoll_fd_, EPOLL_CTL_MOD, client_fd, &ev);
+}
+
+void SelectPoller::disableOut(int client_fd) {
+    struct epoll_event ev;
+    ev.events = EPOLLIN;
+    ev.data.fd = client_fd;
+    epoll_ctl(epoll_fd_, EPOLL_CTL_MOD, client_fd, &ev);
+}
+
 int SelectPoller::getEpoll_fd() { return epoll_fd_; }
 
 void Buffer::appendData(const char *data, ssize_t len) {
@@ -232,7 +246,6 @@ void Connection::recv(int client_fd) {
 
 void Connection::send(int client_fd) {
     std::string request;
-    int epoll_fd = poller_->getEpoll_fd();
     bool is_need_restore = false;
 
     while (recv_buffer.takeData(
@@ -256,12 +269,7 @@ void Connection::send(int client_fd) {
         } else {
             // n < 0
             if (errno == EAGAIN || errno == EWOULDBLOCK) {
-
-                struct epoll_event ev;
-                ev.events = EPOLLIN | EPOLLOUT;
-                ev.data.fd = client_fd;
-                epoll_ctl(epoll_fd, EPOLL_CTL_MOD, client_fd, &ev);
-
+                poller_->enableOut(client_fd);
                 is_need_restore = true;
 
                 return;
@@ -274,12 +282,7 @@ void Connection::send(int client_fd) {
     }
 
     if (is_need_restore) {
-
-        struct epoll_event ev;
-        ev.events = EPOLLIN;
-        ev.data.fd = client_fd;
-        epoll_ctl(epoll_fd, EPOLL_CTL_MOD, client_fd, &ev);
-
+        poller_->disableOut(client_fd);
         is_need_restore = false;
     }
 }
