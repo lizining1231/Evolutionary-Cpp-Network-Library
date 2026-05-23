@@ -31,10 +31,10 @@ class SocketListener {
     SocketListener &operator=(const SocketListener &) = delete;
 };
 
-class SelectPoller {
+class Poller {
   public:
-    explicit SelectPoller(int listen_fd);
-    ~SelectPoller() = default;
+    explicit Poller(int listen_fd);
+    ~Poller() = default;
 
     void addFd(int client_fd);
     void removeFd(int client_fd);
@@ -67,14 +67,14 @@ class Buffer {
 
 class ConnectionManager {
   public:
-    explicit ConnectionManager(SelectPoller *poller_);
+    explicit ConnectionManager(Poller *poller_);
     Connection *getconn(int client_fd);
     void add(int client_fd);
     void remove(int client_fd);
 
   private:
     std::map<int, Connection> connections_; // 一个fd对应一个连接
-    SelectPoller *poller_;
+    Poller *poller_;
 };
 
 class Connection {
@@ -89,7 +89,7 @@ class Connection {
     void setCloseCallback(CloseCallback close_cb, ConnectionManager *connmgr);
 
     void setDelimeter(const std::string &delim);
-    SelectPoller *poller_;
+    Poller *poller_;
 
   private:
     std::string delimeter_;
@@ -112,7 +112,7 @@ class EventLoop {
 
   private:
     SocketListener listener;
-    SelectPoller poller;
+    Poller poller;
     ConnectionManager connmgr;
     MessageCallback user_handler;
     bool running_;

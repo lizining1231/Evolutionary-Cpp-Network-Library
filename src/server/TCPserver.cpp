@@ -100,7 +100,7 @@ void SocketListener::close() {
 }
 
 // SocketListener类没有无参构造函数，这里添加显示构造
-SelectPoller::SelectPoller(int listen_fd) : listen_fd_(listen_fd) {
+Poller::Poller(int listen_fd) : listen_fd_(listen_fd) {
     epoll_fd_ = epoll_create1(0);
 
     struct epoll_event ev;
@@ -109,14 +109,14 @@ SelectPoller::SelectPoller(int listen_fd) : listen_fd_(listen_fd) {
     epoll_ctl(epoll_fd_, EPOLL_CTL_ADD, listen_fd, &ev);
 }
 
-void SelectPoller::addFd(int client_fd) {
+void Poller::addFd(int client_fd) {
     struct epoll_event ev;
     ev.events = EPOLLIN;
     ev.data.fd = client_fd;
     epoll_ctl(epoll_fd_, EPOLL_CTL_ADD, client_fd, &ev);
 }
 
-void SelectPoller::wait() {
+void Poller::wait() {
     ready_count_ = epoll_wait(epoll_fd_, events_, MAX_EVENTS, 1);
 
     if (ready_count_ < 0) {
@@ -124,7 +124,7 @@ void SelectPoller::wait() {
     }
 }
 
-void SelectPoller::removeFd(int client_fd) {
+void Poller::removeFd(int client_fd) {
     struct epoll_event ev;
     ev.events = EPOLLIN;
     ev.data.fd = client_fd;
@@ -133,21 +133,21 @@ void SelectPoller::removeFd(int client_fd) {
     ::close(client_fd);
 }
 
-void SelectPoller::enableOut(int client_fd) {
+void Poller::enableOut(int client_fd) {
     struct epoll_event ev;
     ev.events = EPOLLIN | EPOLLOUT;
     ev.data.fd = client_fd;
     epoll_ctl(epoll_fd_, EPOLL_CTL_MOD, client_fd, &ev);
 }
 
-void SelectPoller::disableOut(int client_fd) {
+void Poller::disableOut(int client_fd) {
     struct epoll_event ev;
     ev.events = EPOLLIN;
     ev.data.fd = client_fd;
     epoll_ctl(epoll_fd_, EPOLL_CTL_MOD, client_fd, &ev);
 }
 
-int SelectPoller::getEpoll_fd() { return epoll_fd_; }
+int Poller::getEpoll_fd() { return epoll_fd_; }
 
 void Buffer::appendData(const char *data, ssize_t len) {
     recv_buffer.append(data, len);
@@ -170,7 +170,7 @@ Connection::Connection(int client_fd) : client_fd(client_fd) {}
 // 当map找不到key值时会利用此默认构造函数来创建
 Connection::Connection() { poller_ = nullptr; }
 
-ConnectionManager::ConnectionManager(SelectPoller *poller) : poller_(poller) {}
+ConnectionManager::ConnectionManager(Poller *poller) : poller_(poller) {}
 
 Connection *ConnectionManager::getconn(int client_fd) {
     auto it = connections_.find(client_fd);
