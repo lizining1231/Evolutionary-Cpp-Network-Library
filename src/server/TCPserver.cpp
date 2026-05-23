@@ -246,7 +246,7 @@ void Connection::recv(int client_fd) {
 
 void Connection::send(int client_fd) {
     std::string request;
-    bool is_need_restore = false;
+    send_blocked_ = false;
 
     while (recv_buffer.takeData(
         request, delimeter_)) { // 循环直到无数据，打包发送到缓冲区
@@ -270,7 +270,7 @@ void Connection::send(int client_fd) {
             // n < 0
             if (errno == EAGAIN || errno == EWOULDBLOCK) {
                 poller_->enableOut(client_fd);
-                is_need_restore = true;
+                send_blocked_ = true;
 
                 return;
             } else {
@@ -281,9 +281,9 @@ void Connection::send(int client_fd) {
         }
     }
 
-    if (is_need_restore) {
+    if (send_blocked_) {
         poller_->disableOut(client_fd);
-        is_need_restore = false;
+        send_blocked_ = false;
     }
 }
 

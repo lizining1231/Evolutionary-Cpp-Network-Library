@@ -95,6 +95,7 @@ class Connection {
     std::string delimeter_;
     std::string send_buffer;
     int client_fd;
+    bool send_blocked_;
     Buffer recv_buffer;
     ConnectionManager *connmgr_;
     CloseCallback close_cb_;
