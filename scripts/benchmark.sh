@@ -64,22 +64,22 @@ fi
 
 echo -e "${GREEN}✓ 宿主机端口: $HOST_PORT, 容器内端口: $CONTAINER_PORT${NC}"
 
-# 重启容器使用新环境
+# 改动1：替换 down+up 为 restart
 echo -e "${YELLOW}重启容器应用新环境...${NC}"
-docker compose down 2>/dev/null || true
-docker compose up -d
+docker compose restart
 
 # 等待容器启动
 echo -e "${YELLOW}等待容器启动...${NC}"
 sleep 5
 
-# 检查服务是否自动启动（只检查进程，不检查端口）
-if docker exec im-gateway-$ENV pgrep TCPserver > /dev/null; then
-    SERVER_PID=$(docker exec im-gateway-$ENV pgrep TCPserver | head -1)
+# 改动2：容器名加上 -dev 后缀
+CONTAINER_NAME="im-gateway-${ENV}-dev"
+if docker exec $CONTAINER_NAME pgrep TCPserver > /dev/null; then
+    SERVER_PID=$(docker exec $CONTAINER_NAME pgrep TCPserver | head -1)
     echo -e "${GREEN}✓ TCPserver 已自动启动 (PID: $SERVER_PID)${NC}"
 else
     echo -e "${RED}✗ TCPserver 未自动启动，查看日志:${NC}"
-    docker logs im-gateway-$ENV --tail 50
+    docker logs $CONTAINER_NAME --tail 50
     exit 1
 fi
 
@@ -117,7 +117,7 @@ while ! curl -s -o /dev/null -w "%{http_code}" http://localhost:$HOST_PORT | gre
         echo -e "\n${YELLOW}最后一次响应:${NC}"
         curl -v http://localhost:$HOST_PORT 2>&1 || true
         echo -e "\n${YELLOW}容器日志:${NC}"
-        docker logs im-gateway-$ENV --tail 20
+        docker logs $CONTAINER_NAME --tail 20
         exit 1
     fi
     echo -e "${YELLOW}等待服务启动... ($RETRY_COUNT/$MAX_RETRIES)${NC}"
@@ -153,7 +153,6 @@ sleep 2
 echo -e "${YELLOW}[2/5] 基准测试 (100并发)${NC}"
 BASELINE=$(wrk -t$THREADS -c100 -d${DURATION}s --latency $URL 2>&1)
 echo "$BASELINE" | grep "Requests/sec" | awk '{print "  QPS: "$2}'
-echo "$BASELINE" >> $REPORT_FILE.tmp
 sleep 2
 
 # 3. 阶梯加压
@@ -164,17 +163,7 @@ CONCURRENCY=(100 200 400 600 800 1000 1200 1500)
 for CONN in "${CONCURRENCY[@]}"; do
     echo -e "${BLUE}--- 测试 $CONN 并发 ---${NC}"
     
-    # 如果是100并发，直接输出原始格式
-    if [ "$CONN" -eq 100 ]; then
-        echo -e "\n${GREEN}=== 100并发原始测试结果 ===${NC}"
-        wrk -t$THREADS -c$CONN -d${DURATION}s --latency $URL
-        echo -e "${GREEN}=============================${NC}\n"
-
-        OUTPUT=$(wrk -t$THREADS -c$CONN -d${DURATION}s --latency $URL 2>&1)
-    else
-         # 其他并发正常执行并捕获输出
-        OUTPUT=$(wrk -t$THREADS -c$CONN -d${DURATION}s --latency $URL 2>&1)
-    fi
+    OUTPUT=$(wrk -t$THREADS -c$CONN -d${DURATION}s --latency $URL 2>&1)
     
     # 提取数据
     QPS=$(echo "$OUTPUT" | grep "Requests/sec" | awk '{print $2}')

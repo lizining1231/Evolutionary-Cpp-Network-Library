@@ -2,25 +2,21 @@ version: '3.8'
 
 services:
   im-gateway:
-    build: .
-    container_name: "im-gateway-${NODE_ENV:-test}"
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: "im-gateway-${NODE_ENV:-test}-dev"
+    
     ports:
       - "${EXTERNAL_PORT:-18080}:${PORT:-8080}"
     
-    # 资源限制 - 直接写死，确保生效
+    # 资源限制
     cpus: 4
     mem_limit: 2g
     mem_reservation: 1g
     
-    # 或者用这种格式（二选一，不要同时用）
-    # deploy:
-    #   resources:
-    #     limits:
-    #       cpus: '4'
-    #       memory: 2G
-    #     reservations:
-    #       cpus: '2'
-    #       memory: 1G
+    volumes:
+      - ./build:/app/bin
     
     environment:
       NODE_ENV: ${NODE_ENV:-test}

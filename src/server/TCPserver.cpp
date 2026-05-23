@@ -14,10 +14,11 @@
 #include <sys/time.h>
 #include <string>
 #include <map>
+#include <csignal>
 
 #define BACKLOG 128
 
-SocketListener::SocketListener(int port):listen_fd_(-1){    // 当initSocket失败, listen_fd_=-1
+SocketListener::SocketListener(int port):listen_fd_(-1){
     initSocket(port);
 }
 
@@ -84,7 +85,7 @@ int SocketListener::accept(){
 }
 
 void SocketListener::close(){
-     if(listen_fd_>=0){
+    if(listen_fd_>=0){
         shutdown(listen_fd_, SHUT_WR);// 发送FIN
         ::close(listen_fd_);
 
@@ -94,14 +95,13 @@ void SocketListener::close(){
 
 // SocketListener类没有无参构造函数，这里添加显示构造
 SelectPoller::SelectPoller(int listen_fd):listen_fd_(listen_fd),max_fd(listen_fd){
-
     FD_ZERO(&all_fds);
     FD_SET(listen_fd,&all_fds);
 
 }
 
 void SelectPoller::addFd(int client_fd){
-     if(client_fd>0){
+    if(client_fd>0){
         client_fds.push_back(client_fd);
         FD_SET(client_fd,&all_fds);   // 把新客户端加入被监听队伍
 
@@ -176,13 +176,16 @@ bool Buffer::takeData(std::string& request,const std::string& delimeter){
     }
 }
 
-Connection::Connection(int client_fd):client_fd(client_fd){}
-Connection::Connection(){}    // 当map找不到key值时会利用此默认构造函数来创建
+Connection::Connection(int client_fd):client_fd(client_fd){
+}
 
-ConnectionManager::ConnectionManager(SelectPoller* poller):poller_(poller){}
+Connection::Connection(){
+}    // 当map找不到key值时会利用此默认构造函数来创建
+
+ConnectionManager::ConnectionManager(SelectPoller* poller):poller_(poller){
+}
 
 Connection* ConnectionManager::getconn(int client_fd){
-
     auto it=connections_.find(client_fd);
 
     if(it!=connections_.end()){
@@ -202,6 +205,7 @@ void ConnectionManager::remove(int client_fd){
     connections_.erase(client_fd);
     poller_->removeFd(client_fd);
 }
+
 void Connection::setCloseCallback(CloseCallback close_cb,ConnectionManager* connmgr){
     close_cb_=close_cb;
     connmgr_=connmgr;
@@ -223,6 +227,10 @@ void Connection::setDelimeter(const std::string& delim){
 }
 
 void Connection::recv(int client_fd){
+    if(this == nullptr) {
+        return;
+    }
+
     char temp_buffer[4096];
     ssize_t bytes_read;
     
@@ -276,10 +284,12 @@ poller(listener.getFd()),
 connmgr(&poller),
 delimeter_("")
 {
+    signal(SIGPIPE,SIG_IGN);    // 防止Fin包未收到时send数据导致进程被砍
     std::cout<<"the initialized TCP server on port"<<port<<std::endl;
 }
 
-EventLoop::~EventLoop(){}
+EventLoop::~EventLoop(){
+}
 
 void EventLoop::setMessageCallback(MessageCallback cb){
     user_handler=cb;
@@ -310,10 +320,24 @@ void EventLoop::start(){
         conn->setDelimeter(delimeter_);
     }
     // client_fds作为vector类型已经在addFd()里面被push_back过了，这里直接用
-    for(int fd:poller.client_fds){
+
+    // 拷贝一份临时vector，防止recv出错导致vector在遍历时被删除元素
+    std::vector<int>copy_fds=poller.client_fds;
+
+    for(int fd:copy_fds){
           if (poller.isReady(fd)){
+            
             Connection* conn=connmgr.getconn(fd);
+            
+            if(conn==nullptr){
+                continue;
+            }
+
             conn->recv(fd);
+
+            conn = connmgr.getconn(fd);            // 防止recv失败后send读到野指针
+            if (conn == nullptr) continue;      
+
             conn->send(fd);
             }
         }
