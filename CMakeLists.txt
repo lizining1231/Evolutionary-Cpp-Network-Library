@@ -9,7 +9,12 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 # 创建可执行文件 - 名字叫 TCPserver
 add_executable(TCPserver  
     src/main.cpp
-    src/server/TCPserver.cpp
+    src/Buffer.cpp
+    src/SocketListener.cpp
+    src/Poller.cpp
+    src/Connection.cpp
+    src/ConnectionManager.cpp
+    src/EventLoop.cpp
 )
 
 # 包含目录 - 添加 include 目录
