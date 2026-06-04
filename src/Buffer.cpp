@@ -10,8 +10,9 @@ bool Buffer::takeData(std::string &request, const std::string &delimeter) {
     if (pos == std::string::npos) {
         return false; // 如果没找到字符串就返回false, 调用层进行处理
     } else {
-        request = recv_buffer_.substr(0, pos + 4);
-        recv_buffer_.erase(0, pos + 4);
+        size_t delim_len = delimeter.length();
+        request = recv_buffer_.substr(0, pos + delim_len);
+        recv_buffer_.erase(0, pos + delim_len);
         return true;
     }
 }
