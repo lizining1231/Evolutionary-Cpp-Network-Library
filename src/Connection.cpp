@@ -55,24 +55,20 @@ void Connection::recv(int client_fd) {
     if (this) {
         this->recv_buffer_.appendData(temp_buffer, bytes_read);
     } // 不用写else，因为如果没有conn什么都不用做
-}
 
-void Connection::send(int client_fd) {
+    // 解析 recv_buffer_，调 handler 生成响应，放入 send_buffer_
     std::string request;
-    send_blocked_ = false;
-
-    while (recv_buffer_.takeData(
-        request, delimeter_)) { // 循环直到无数据，打包发送到缓冲区
-
+    while (recv_buffer_.takeData(request, delimeter_)) {
         if (!handler_) {
             std::cout << "handler 为空!\n";
             continue;
         }
-
         std::string response = handler_(request.c_str(), request.size());
         send_buffer_.append(response);
     }
+}
 
+void Connection::send(int client_fd) {
     while (!send_buffer_.empty()) {
         ssize_t n =
             ::send(client_fd, send_buffer_.c_str(), send_buffer_.length(), 0);
