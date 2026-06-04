@@ -23,7 +23,7 @@ class Poller {
     int ready_count_;
 
   private:
-    int port;
+    int port_;
     int listen_fd_;
     int epoll_fd_;
 };

@@ -7,7 +7,7 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
-Connection::Connection(int client_fd) : client_fd(client_fd) {}
+Connection::Connection(int client_fd) : client_fd_(client_fd) {}
 
 // 当map找不到key值时会利用此默认构造函数来创建
 Connection::Connection() { poller_ = nullptr; }
@@ -19,7 +19,7 @@ void Connection::setCloseCallback(CloseCallback close_cb,
 }
 
 void Connection::setMessageCallback(MessageCallback handleMessage) {
-    handler = handleMessage;
+    handler_ = handleMessage;
 }
 
 void Connection::setDelimeter(const std::string &delim) { delimeter_ = delim; }
@@ -53,7 +53,7 @@ void Connection::recv(int client_fd) {
 
     // 为进行职责分离, 将临时缓冲区的数据追加到永久缓冲区, 永久缓冲区负责处理
     if (this) {
-        this->recv_buffer.appendData(temp_buffer, bytes_read);
+        this->recv_buffer_.appendData(temp_buffer, bytes_read);
     } // 不用写else，因为如果没有conn什么都不用做
 }
 
@@ -61,24 +61,24 @@ void Connection::send(int client_fd) {
     std::string request;
     send_blocked_ = false;
 
-    while (recv_buffer.takeData(
+    while (recv_buffer_.takeData(
         request, delimeter_)) { // 循环直到无数据，打包发送到缓冲区
 
-        if (!handler) {
+        if (!handler_) {
             std::cout << "handler 为空!\n";
             continue;
         }
 
-        std::string response = handler(request.c_str(), request.size());
-        send_buffer.append(response);
+        std::string response = handler_(request.c_str(), request.size());
+        send_buffer_.append(response);
     }
 
-    while (!send_buffer.empty()) {
+    while (!send_buffer_.empty()) {
         ssize_t n =
-            ::send(client_fd, send_buffer.c_str(), send_buffer.length(), 0);
+            ::send(client_fd, send_buffer_.c_str(), send_buffer_.length(), 0);
 
         if (n > 0) {
-            send_buffer.erase(0, n);
+            send_buffer_.erase(0, n);
         } else {
             // n < 0
             if (errno == EAGAIN || errno == EWOULDBLOCK) {

@@ -26,15 +26,15 @@ class Connection {
 
   private:
   private:
-    int client_fd;
+    int client_fd_;
     bool send_blocked_;
     std::string delimeter_;
-    std::string send_buffer;
+    std::string send_buffer_;
 
-    Buffer recv_buffer;
+    Buffer recv_buffer_;
     ConnectionManager *connmgr_;
     CloseCallback close_cb_;
-    MessageCallback handler;
+    MessageCallback handler_;
 };
 
 #endif

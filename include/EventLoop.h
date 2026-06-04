@@ -18,9 +18,9 @@ class EventLoop {
     void setDelimeter(const std::string &delim);
 
   private:
-    SocketListener listener;
-    Poller poller;
-    ConnectionManager connmgr;
+    SocketListener listener_;
+    Poller poller_;
+    ConnectionManager connmgr_;
     MessageCallback user_handler;
     bool running_;
     std::string delimeter_;

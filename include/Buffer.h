@@ -10,7 +10,7 @@ class Buffer {
     bool takeData(std::string &request, const std::string &delimeter);
 
   private:
-    std::string recv_buffer;
+    std::string recv_buffer_;
 };
 
 #endif
