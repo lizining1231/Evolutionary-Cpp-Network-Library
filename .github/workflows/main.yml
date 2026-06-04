@@ -1,0 +1,49 @@
+name: Main Branch CI
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build-and-lint:
+    runs-on: ubuntu-24.04
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake build-essential clang-format
+
+      - name: Configure CMake
+        run: cmake -B build -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: cmake --build build --parallel $(nproc)
+
+      - name: Check code formatting
+        run: |
+          find . \( -name '*.h' -o -name '*.cpp' \) \
+            -not -path './build/*' \
+            -exec clang-format --dry-run --Werror {} +
+
+  docker-build:
+    needs: build-and-lint
+    runs-on: ubuntu-24.04
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          tags: cpp-im-gateway:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

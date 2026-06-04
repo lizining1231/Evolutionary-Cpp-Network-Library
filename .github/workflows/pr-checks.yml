@@ -1,0 +1,36 @@
+name: PR Checks
+
+on:
+  push:
+    branches-ignore:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  build-and-lint:
+    runs-on: ubuntu-24.04
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake build-essential clang-format
+
+      - name: Check clang-format version
+        run: clang-format --version
+
+      - name: Configure CMake
+        run: cmake -B build -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: cmake --build build --parallel $(nproc)
+
+      - name: Check code formatting
+        run: |
+          find . \( -name '*.h' -o -name '*.cpp' \) \
+            -not -path './build/*' \
+            -exec clang-format --dry-run --Werror {} +
