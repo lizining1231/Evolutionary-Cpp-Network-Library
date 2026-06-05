@@ -34,7 +34,11 @@ void SocketListener::initSocket(int port) {
     int opt = 1;
     if (setsockopt(listen_fd_, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) <
         0) {
-        throw std::runtime_error("Setsocketopt failed");
+        throw std::runtime_error("Setsockopt SO_REUSEADDR failed");
+    }
+    if (setsockopt(listen_fd_, SOL_SOCKET, SO_REUSEPORT, &opt, sizeof(opt)) <
+        0) {
+        throw std::runtime_error("Setsockopt SO_REUSEPORT failed");
     }
 
     // 绑定地址、端口

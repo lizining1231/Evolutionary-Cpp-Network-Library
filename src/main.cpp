@@ -3,6 +3,8 @@
 #include <cstring>
 #include <iostream>
 #include <string>
+#include <thread>
+#include <vector>
 
 std::string
 handleMessage(char const *request,
@@ -40,12 +42,24 @@ int main(int argc, char *argv[]) {
 
     try {
 
-        std::cout << "TCP server started" << std::endl;
+        unsigned int thread_count = std::thread::hardware_concurrency();
+        std::vector<std::thread> threads;
 
-        EventLoop loop(port);
-        loop.setMessageCallback(handleMessage); // 把用户的业务逻辑传给库
-        loop.setDelimeter("\r\n\r\n");
-        loop.start();
+        std::cout << "Starting " << thread_count << " threads" << std::endl;
+
+        for (unsigned int i = 0; i < thread_count; i++) {
+            threads.emplace_back([port, i]() {
+                EventLoop loop(port);
+                loop.setMessageCallback(handleMessage);
+                loop.setDelimeter("\r\n\r\n");
+                std::cout << "[Thread " << i << "] started" << std::endl;
+                loop.start();
+            });
+        }
+
+        for (auto &t : threads) {
+            t.join();
+        }
 
         std::cout << "TCP server stopped" << std::endl;
         return 0;
