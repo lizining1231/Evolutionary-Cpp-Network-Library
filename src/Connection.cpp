@@ -9,9 +9,6 @@
 
 Connection::Connection(int client_fd) : client_fd_(client_fd) {}
 
-// 当map找不到key值时会利用此默认构造函数来创建
-Connection::Connection() { poller_ = nullptr; }
-
 void Connection::setCloseCallback(CloseCallback close_cb,
                                   ConnectionManager *connmgr) {
     close_cb_ = close_cb;

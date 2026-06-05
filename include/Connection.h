@@ -13,7 +13,7 @@ using CloseCallback = void (*)(int fd, ConnectionManager *connmgr);
 class Connection {
   public:
     Connection(int client_fd);
-    Connection();
+    Connection() = delete;
 
     void send(int client_fd);
     void recv(int client_fd);
