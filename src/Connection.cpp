@@ -10,6 +10,10 @@
 
 Connection::Connection(int client_fd) : client_fd_(client_fd) {}
 
+Connection::~Connection() {
+    ::close(client_fd_);
+}
+
 void Connection::setCloseCallback(CloseCallback close_cb,
                                   ConnectionManager *connmgr) {
     close_cb_ = close_cb;

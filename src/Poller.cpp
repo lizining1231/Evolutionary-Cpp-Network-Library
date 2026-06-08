@@ -37,8 +37,6 @@ void Poller::removeFd(int client_fd) {
     ev.events = EPOLLIN;
     ev.data.fd = client_fd;
     epoll_ctl(epoll_fd_, EPOLL_CTL_DEL, client_fd, &ev);
-
-    ::close(client_fd);
 }
 
 void Poller::enableOut(int client_fd) {
