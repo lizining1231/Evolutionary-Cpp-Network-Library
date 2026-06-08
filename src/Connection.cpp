@@ -6,6 +6,7 @@
 #include <iostream>
 #include <sys/socket.h>
 #include <unistd.h>
+#include <cstring>
 
 Connection::Connection(int client_fd) : client_fd_(client_fd) {}
 
@@ -22,10 +23,6 @@ void Connection::setMessageCallback(MessageCallback handleMessage) {
 void Connection::setDelimeter(const std::string &delim) { delimeter_ = delim; }
 
 void Connection::recv(int client_fd) {
-    if (this == nullptr) {
-        return;
-    }
-
     char temp_buffer[65536];
     ssize_t bytes_read;
 
@@ -33,31 +30,27 @@ void Connection::recv(int client_fd) {
 
     if (bytes_read <= 0) {
         if (bytes_read == 0) {
-            std::cout << "Client disconnected" << std::endl;
+            std::cout << "[DEBUG] Client disconnected (fd:" << client_fd << ")" << std::endl;
             close_cb_(client_fd, connmgr_);
             return;
         } else {
-            // bytes_read<0
             if (errno == EAGAIN || errno == EWOULDBLOCK) {
                 return;
             } else {
-                std::cerr << "Receive error" << std::endl;
+                std::cerr << "[ERROR] Receive error (fd:" << client_fd << "): " << strerror(errno) << std::endl;
                 close_cb_(client_fd, connmgr_);
                 return;
             }
         }
     }
 
-    // 为进行职责分离, 将临时缓冲区的数据追加到永久缓冲区, 永久缓冲区负责处理
-    if (this) {
-        this->recv_buffer_.appendData(temp_buffer, bytes_read);
-    } // 不用写else，因为如果没有conn什么都不用做
+    recv_buffer_.appendData(temp_buffer, bytes_read);
 
     // 解析 recv_buffer_，调 handler 生成响应，放入 send_buffer_
     std::string request;
     while (recv_buffer_.takeData(request, delimeter_)) {
         if (!handler_) {
-            std::cout << "handler 为空!\n";
+            std::cerr << "[WARN] handler is null, skipping request" << std::endl;
             continue;
         }
         std::string response = handler_(request.c_str(), request.size());
@@ -80,7 +73,7 @@ void Connection::send(int client_fd) {
 
                 return;
             } else {
-                std::cerr << " send error" << std::endl;
+                std::cerr << "[ERROR] Send error (fd:" << client_fd << "): " << strerror(errno) << std::endl;
                 close_cb_(client_fd, connmgr_);
                 return;
             }
