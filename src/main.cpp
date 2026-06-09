@@ -5,6 +5,16 @@
 #include <string>
 #include <thread>
 #include <vector>
+#include <atomic>
+#include <csignal>
+#include <memory>
+#include <chrono>
+
+std::atomic<bool> stopping{false};
+
+void signalHandle(int){
+    stopping = true;
+}
 
 std::string
 handleMessage(char const *request,
@@ -42,19 +52,36 @@ int main(int argc, char *argv[]) {
 
     try {
 
-        unsigned int thread_count = std::thread::hardware_concurrency();
+        signal(SIGINT,signalHandle);
+        signal(SIGTERM,signalHandle);
+
+        unsigned int thread_count = 4;
         std::vector<std::thread> threads;
 
         std::cout << "Starting " << thread_count << " threads" << std::endl;
 
+        std::vector<std::unique_ptr<EventLoop>>loops;
+
         for (unsigned int i = 0; i < thread_count; i++) {
-            threads.emplace_back([port, i]() {
-                EventLoop loop(port);
-                loop.setMessageCallback(handleMessage);
-                loop.setDelimeter("\r\n\r\n");
-                std::cout << "[Thread " << i << "] started" << std::endl;
-                loop.start();
+            auto loop = std::make_unique<EventLoop>(port);
+            loop->setMessageCallback(handleMessage);
+            loop->setDelimeter("\r\n\r\n");
+            loops.push_back(std::move(loop));
+        }
+
+        for (unsigned int i = 0; i < thread_count; i++) {
+            threads.emplace_back([ptr = loops[i].get(), i]() {
+                std::cout << "[Thread " << i << "] starting..." << std::endl;
+                ptr -> start();
             });
+        }
+
+        while (!stopping) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        }
+
+        for (unsigned int i = 0; i < thread_count; i++) {
+            loops[i] -> stop();
         }
 
         for (auto &t : threads) {

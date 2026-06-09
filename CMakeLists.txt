@@ -1,8 +1,8 @@
 cmake_minimum_required(VERSION 3.10)
 project(cpp-im-gateway LANGUAGES C CXX)
 
-# 改为C++11
-set(CMAKE_CXX_STANDARD 11)
+# 改为C++14
+set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
