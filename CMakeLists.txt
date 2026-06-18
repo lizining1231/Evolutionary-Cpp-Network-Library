@@ -1,15 +1,20 @@
 cmake_minimum_required(VERSION 3.10)
 project(cpp-im-gateway LANGUAGES C CXX)
 
-# 改为C++11
-set(CMAKE_CXX_STANDARD 11)
+# 改为C++14
+set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 # 创建可执行文件 - 名字叫 TCPserver
 add_executable(TCPserver  
     src/main.cpp
-    src/server/TCPserver.cpp
+    src/Buffer.cpp
+    src/SocketListener.cpp
+    src/Poller.cpp
+    src/Connection.cpp
+    src/ConnectionManager.cpp
+    src/EventLoop.cpp
 )
 
 # 包含目录 - 添加 include 目录

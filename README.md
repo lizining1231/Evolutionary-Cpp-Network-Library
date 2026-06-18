@@ -16,7 +16,7 @@ https://mp.weixin.qq.com/s/Kn-uA6J0l83c6KVfErxMQQ
 
 ### 📆 阶段性规划
 
-**Week 1: 跑通一个阻塞IO模型的echo服务器**✅
+**阶段 1: 跑通一个阻塞IO模型的echo服务器**✅
 
 **核心实现与成果**
 - 实现单线程阻塞IO模型echo服务器
@@ -28,7 +28,7 @@ https://mp.weixin.qq.com/s/Kn-uA6J0l83c6KVfErxMQQ
 - 只能支持一个连接，第二个连接阻塞
 
 
-**Week 2: select引入，从服务器到网络库的多步重构**✅
+**阶段 2: select引入，从服务器到网络库的多步重构**✅
 
 **核心实现摘要**
 - 从阻塞IO重构为select多路复用模型，支持多客户端并发连接
@@ -64,27 +64,67 @@ https://mp.weixin.qq.com/s/Kn-uA6J0l83c6KVfErxMQQ
 《缓冲区共享导致的P99剧烈抖动——为什么一定要有Buffer和Connection类》
 
 **当前阶段困难**
+
 - Select文件描述符1024瓶颈对长连接的限制
 
-**Week 3: IO模型升级**🚧
-- select → epoll ET模式（核心替换）
-- 可能会遇到EAGAIN和边缘触发
-- 性能对比：延迟降低？%，CPU降低？%，连接数上升？%，QPS变化？%
-- 产出：《epoll ET模式实战与踩坑记录》
+**阶段 3: IO模型改为epoll，引入多线程** （实现中）
 
-**Week 4: 规模性性能分析**（以下均为未实现规划💭）
+**核心实现摘要**
+
+**第一步：select → epoll LT模式**
+- 彻底移除 fd_set，替换为 epoll_create1 + epoll_ctl + epoll_wait
+- 主循环从 O(N) 遍历全部连接，改为 O(1) 就绪事件数组遍历
+- 将 listen_fd 和 client_fd 设为非阻塞，覆盖 accept/recv/send 的 EAGAIN 分支
+- 封装 enableOut/disableOut 方法，隔离 epoll_ctl 细节
+- 修复 send() EAGAIN 后 EPOLLOUT 无法摘除的问题（引入 send_blocked_ 成员变量，打破临时变量生命周期陷阱）
+
+**第二步：多线程扩展（REUSEPORT + 一线程一事件循环）**
+- 引入 `std::thread`，利用 `SO_REUSEPORT` 实现内核级负载均衡
+- 每个线程独立创建 EventLoop 并绑定同一端口，零共享、零锁
+- 添加优雅退出机制（SIGINT/SIGTERM 信号处理 + stop/join）
+
+**性能排查与问题修复**
+
+1. **epoll_ctl 报错率 70%**：removeFd 中先 close(fd) 再 epoll_ctl(DEL) 导致 EBADF。修复：调换顺序，先 epoll_ctl 再 close → 错误率降至 0%
+
+2. **容器内 2000 并发进程崩溃**：容器 fd 上限默认 1024。修复：docker-compose 设置 nofile=1048576 → 支持 100,000 并发
+
+3. **200+ 并发 P99 崩塌至 1.88s**：HTTP 响应强制设置 `Connection: close`，导致短连接风暴。修复：改为 `Connection: keep-alive` → P99 从 1.88s 降至 3.85ms
+
+4. **Buffer::takeData 丢数据**：分隔符长度硬编码为 4，自定义分隔符时丢数据。修复：改为 `delimeter.length()` 动态获取
+
+5. **Connection 默认构造造成未定义行为**：std::map::operator[] 会创建垃圾对象。修复：`Connection() = delete`，编译期强制带参构造
+
+6. **命名与架构清理**：SelectPoller → Poller（消除 select 遗留命名），TCPserver → EventLoop，拆分大文件为 6 个独立编译单元
+
+**阶段成果**
+
+- **最大连接数**：select 1024 → epoll 40,000+（提升 97 倍，不再受1024限制，支持40000+并发）
+- **崩溃起始点**：单线程 400 并发 → 多线程 20,000 并发（提升 50 倍）
+- **P99 @ 400 并发**：单线程 523ms → 多线程 17.60ms（降低 96.6%）
+- **QPS 对比**：
+  - select 单线程峰值（容器内）：85k
+  - epoll 单线程 LT 模式（本地回环）：85k → 90k（基本持平）
+  - epoll 单线程 LT 模式（本地回环，修复短连接问题后）：90k → 250k（提升 177%）
+  - epoll + REUSEPORT（12线程，容器内）：116k
+- **架构**：完成网络层、连接层、业务层解耦，支持外部优雅停止
+
+**当前困难**
+
+- epoll ET 模式尚未实现，LT 模式下仍有较多 epoll_ctl 调用开销
+- 多线程场景下每个线程独立持有连接，未实现连接迁移与负载再均衡
+
+**阶段 4: 规模性性能分析**（以下为未实现）
 - 建立自动化压测框架
 - docker部署
 - 产出：完整的性能基准测试
 
 
-**Week 5: IO模型再次升级**
+**阶段 5: IO模型再次升级**
 - epoll → io_uring
-- docker部署
-- 产出：完整的性能基准测试
 
 
-**Week 6: 内存优化探索**
+**阶段 6: 内存优化探索**    
 - 引入Message对象池（第一个优化点）
 - Valgrind分析：malloc调用减少？%
 - 可能会遇到伪共享导致性能回退
@@ -93,16 +133,11 @@ https://mp.weixin.qq.com/s/Kn-uA6J0l83c6KVfErxMQQ
 - cache line对齐（alignas 64）
 - 产出：内存优化专项报告
 
-**Week 7: 协议层强化**
+**阶段 7: 协议层强化**
 - 实现零拷贝转发原型
 - 引用计数缓冲区设计
 - 性能对比：大消息场景CPU降低？%
 - 产出：零拷贝技术验证报告
-
-**Week 8: 架构设计准备**
-- 分析单线程瓶颈（CPU跑满）
-- 产出：多线程架构设计方案，在遇到瓶颈后再升级无锁队列
-- 产出：多线程架构设计方案，在遇到瓶颈后再升级无锁队列
 
 ### 最终对照数据（Week 3与week 8）
 - 最大连接数：？ → ？（？倍）
