@@ -36,6 +36,9 @@ void EventLoop::start() {
                 int new_fd = listener_.accept();
                 connmgr_.add(new_fd);
                 Connection *conn = connmgr_.getconn(new_fd);
+                if (conn == nullptr) {
+                    continue;
+                }
 
                 conn->setMessageCallback(user_handler);
                 conn->setCloseCallback(onConnectionClose, &connmgr_);
