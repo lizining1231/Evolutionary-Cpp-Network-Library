@@ -4,9 +4,8 @@
 #include "Connection.h"
 #include "Poller.h"
 
-#include <map>
-
-class Connection; // 前置声明
+#include <vector>
+#include <memory>
 
 class ConnectionManager {
   public:
@@ -16,7 +15,7 @@ class ConnectionManager {
     void remove(int client_fd);
 
   private:
-    std::map<int, Connection> connections_; // 一个fd对应一个连接
+    std::vector<std::unique_ptr<Connection>> connections_; // 一个fd对应一个连接
     Poller *poller_;
 };
 

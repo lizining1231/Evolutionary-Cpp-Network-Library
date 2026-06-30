@@ -60,6 +60,7 @@ benchmark_report_*.txt.tmp
 *.temp
 *.log
 .private_scripts/
+.private_docs/
 # 测试产物
 test_*.txt
 test_*.log

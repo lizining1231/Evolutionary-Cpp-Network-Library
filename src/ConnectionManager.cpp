@@ -3,23 +3,32 @@
 ConnectionManager::ConnectionManager(Poller *poller) : poller_(poller) {}
 
 Connection *ConnectionManager::getconn(int client_fd) {
-    auto it = connections_.find(client_fd);
-
-    if (it != connections_.end()) {
-        return &(it->second);
-    } else {
+    if (client_fd < 0 || client_fd >= (int)connections_.size()) {
         return nullptr;
     }
+    return connections_[client_fd].get();
 }
 
 void ConnectionManager::add(int client_fd) {
-    connections_.emplace(client_fd, client_fd);
+    
+    if (client_fd < 0) {
+        return;
+    }
+
+    if (client_fd >= (int)connections_.size()) {
+        connections_.resize(client_fd + 1);
+    }
+    connections_[client_fd] = std::make_unique<Connection>(client_fd);
+
     poller_->addFd(client_fd);
 }
 
 void ConnectionManager::remove(int client_fd) {
     poller_->removeFd(client_fd);       // 先从 epoll 移除
-    connections_.erase(client_fd);      // std::map::erase，触发析构 → ::close(fd)
+
+    if (client_fd >= 0 && client_fd < (int)connections_.size()){
+        connections_[client_fd].reset();
+    }
 }
 
 void onConnectionClose(int fd, ConnectionManager *connmgr) {
