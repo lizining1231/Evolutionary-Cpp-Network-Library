@@ -27,7 +27,7 @@ void Poller::addFd(int client_fd) {
 void Poller::wait() {
     ready_count_ = epoll_wait(epoll_fd_, events_, MAX_EVENTS, 100);
 
-    if (ready_count_ < 0) {
+    if (ready_count_ < 0 && errno != EINTR) {
         throw std::runtime_error(std::string("epoll_wait:") + strerror(errno));
     }
 }
