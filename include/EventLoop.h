@@ -7,6 +7,7 @@
 #include "SocketListener.h"
 
 #include <string>
+#include <sys/eventfd.h>
 
 class EventLoop {
   public:

@@ -7,15 +7,29 @@
 #include <string>
 #include <sys/epoll.h>
 #include <unistd.h>
+#include <sys/eventfd.h>
+#include <unistd.h>
+
 // EventLoop类的实现
 EventLoop::EventLoop(int port)
     : listener_(port), poller_(listener_.getFd()), connmgr_(&poller_),
       delimiter_("") {
     signal(SIGPIPE, SIG_IGN); // 防止Fin包未收到时send数据导致进程被砍
+
+    wakeup_fd_ = eventfd(0, EFD_NONBLOCK);
+    if(wakeup_fd_ == -1) {
+        throw std::runtime_error("eventfd creation failed");
+    }
+    poller_.addFd(wakeup_fd_);
+
     std::cout << "the initialized TCP server on port" << port << std::endl;
 }
 
-EventLoop::~EventLoop() {}
+EventLoop::~EventLoop() {
+    if (wakeup_fd_ != -1) {
+        ::close(wakeup_fd_);
+    }
+}
 
 void EventLoop::setMessageCallback(MessageCallback cb) { user_handler = cb; }
 
@@ -47,6 +61,10 @@ void EventLoop::start() {
                     [this, new_fd]() { poller_.disableOut(new_fd); }
                 );
 
+            } else if (fd == wakeup_fd_) {
+                uint64_t one;
+                ::read(wakeup_fd_, &one, sizeof(one));
+
             } else {
                 Connection *conn = connmgr_.getconn(fd);
 
@@ -76,4 +94,9 @@ void EventLoop::start() {
     }
 }
 
-void EventLoop::stop() { running_ = false; }
+void EventLoop::stop() {
+    running_ = false;
+
+    uint64_t one = 1;
+    ::write(wakeup_fd_, &one, sizeof(one));
+}
