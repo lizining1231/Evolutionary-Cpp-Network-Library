@@ -29,15 +29,14 @@ void EventLoop::start() {
     while (running_) {
         poller_.wait();
 
-        for (int i = 0; i < poller_.ready_count_; i++) {
-            int fd = poller_.events_[i].data.fd;
+        poller_.iterateEvents([&](int fd, uint32_t events) {
 
             if (fd == listen_fd) {
                 int new_fd = listener_.accept();
                 connmgr_.add(new_fd);
                 Connection *conn = connmgr_.getconn(new_fd);
                 if (conn == nullptr) {
-                    continue;
+                    return;
                 }
 
                 conn->setMessageCallback(user_handler);
@@ -46,18 +45,17 @@ void EventLoop::start() {
                 conn->poller_ = &poller_;
 
             } else {
-                uint32_t events = poller_.events_[i].events;
                 Connection *conn = connmgr_.getconn(fd);
 
                 if (conn == nullptr) {
-                    continue;
+                    return;
                 }
 
                 if (events & EPOLLIN) {
                     conn->recv(fd);
                     conn = connmgr_.getconn(fd); // 防止recv失败后send读到野指针
                     if (conn == nullptr) {
-                        continue;
+                        return;
                     }
                     conn->send(fd);
                 }
@@ -65,12 +63,13 @@ void EventLoop::start() {
                 if (events & EPOLLOUT) {
                     conn = connmgr_.getconn(fd);
                     if (conn == nullptr) {
-                        continue;
+                        return;
                     }
                     conn->send(fd);
                 }
             }
-        }
+
+        });
     }
 }
 
