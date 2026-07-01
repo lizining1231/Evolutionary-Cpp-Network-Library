@@ -42,7 +42,10 @@ void EventLoop::start() {
                 conn->setMessageCallback(user_handler);
                 conn->setCloseCallback(onConnectionClose, &connmgr_);
                 conn->setDelimiter(delimiter_);
-                conn->poller_ = &poller_;
+                conn->setWriteCallbacks(
+                    [this, new_fd]() { poller_.enableOut(new_fd); },
+                    [this, new_fd]() { poller_.disableOut(new_fd); }
+                );
 
             } else {
                 Connection *conn = connmgr_.getconn(fd);

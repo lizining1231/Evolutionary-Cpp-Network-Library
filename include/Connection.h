@@ -3,8 +3,8 @@
 
 #include "Buffer.h"
 #include <string>
+#include <functional>
 
-class Poller;
 class ConnectionManager;
 
 using MessageCallback = std::string (*)(char const *msg, size_t len);
@@ -23,9 +23,8 @@ class Connection {
     void setCloseCallback(CloseCallback close_cb, ConnectionManager *connmgr);
     void setDelimiter(const std::string &delim);
 
-    Poller *poller_;
+    void setWriteCallbacks(std::function<void()> enable, std::function<void()> disable);
 
-  private:
   private:
     int client_fd_;
     bool send_blocked_;
@@ -36,6 +35,9 @@ class Connection {
     ConnectionManager *connmgr_;
     CloseCallback close_cb_;
     MessageCallback handler_;
+
+    std::function<void()> enable_write_;
+    std::function<void()> disable_write_;
 };
 
 #endif

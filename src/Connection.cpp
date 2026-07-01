@@ -1,6 +1,5 @@
 #include "Connection.h"
 #include "EventLoop.h"
-#include "Poller.h"
 
 #include <cerrno>
 #include <iostream>
@@ -72,7 +71,9 @@ void Connection::send(int client_fd) {
         } else {
             // n < 0
             if (errno == EAGAIN || errno == EWOULDBLOCK) {
-                poller_->enableOut(client_fd);
+                if (enable_write_) {
+                    enable_write_();
+                }
                 send_blocked_ = true;
 
                 return;
@@ -85,7 +86,15 @@ void Connection::send(int client_fd) {
     }
 
     if (send_blocked_) {
-        poller_->disableOut(client_fd);
+        if (disable_write_) {
+            disable_write_();
+        }
         send_blocked_ = false;
     }
+}
+
+void Connection::setWriteCallbacks(std::function<void()> enable,
+                                   std::function<void()> disable) {
+    enable_write_ = std::move(enable);
+    disable_write_ = std::move(disable);
 }
