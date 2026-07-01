@@ -24,7 +24,7 @@ void Connection::setMessageCallback(MessageCallback handleMessage) {
     handler_ = handleMessage;
 }
 
-void Connection::setDelimeter(const std::string &delim) { delimeter_ = delim; }
+void Connection::setDelimiter(const std::string &delim) { delimiter_ = delim; }
 
 void Connection::recv(int client_fd) {
     char temp_buffer[65536];
@@ -52,7 +52,7 @@ void Connection::recv(int client_fd) {
 
     // 解析 recv_buffer_，调 handler 生成响应，放入 send_buffer_
     std::string request;
-    while (recv_buffer_.takeData(request, delimeter_)) {
+    while (recv_buffer_.takeData(request, delimiter_)) {
         if (!handler_) {
             std::cerr << "[WARN] handler is null, skipping request" << std::endl;
             continue;

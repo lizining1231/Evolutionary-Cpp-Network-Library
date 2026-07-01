@@ -10,7 +10,7 @@
 // EventLoop类的实现
 EventLoop::EventLoop(int port)
     : listener_(port), poller_(listener_.getFd()), connmgr_(&poller_),
-      delimeter_("") {
+      delimiter_("") {
     signal(SIGPIPE, SIG_IGN); // 防止Fin包未收到时send数据导致进程被砍
     std::cout << "the initialized TCP server on port" << port << std::endl;
 }
@@ -19,7 +19,7 @@ EventLoop::~EventLoop() {}
 
 void EventLoop::setMessageCallback(MessageCallback cb) { user_handler = cb; }
 
-void EventLoop::setDelimeter(const std::string &delim) { delimeter_ = delim; }
+void EventLoop::setDelimiter(const std::string &delim) { delimiter_ = delim; }
 
 void EventLoop::start() {
     int listen_fd = listener_.getFd();
@@ -42,7 +42,7 @@ void EventLoop::start() {
 
                 conn->setMessageCallback(user_handler);
                 conn->setCloseCallback(onConnectionClose, &connmgr_);
-                conn->setDelimeter(delimeter_);
+                conn->setDelimiter(delimiter_);
                 conn->poller_ = &poller_;
 
             } else {

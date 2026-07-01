@@ -15,7 +15,7 @@ class EventLoop {
     void start();
     void stop();
     void setMessageCallback(MessageCallback cb);
-    void setDelimeter(const std::string &delim);
+    void setDelimiter(const std::string &delim);
 
   private:
     SocketListener listener_;
@@ -24,7 +24,7 @@ class EventLoop {
     MessageCallback user_handler;
     bool running_;
     int wakeup_fd_;  // eventfd：跨线程唤醒 epoll_wait
-    std::string delimeter_;
+    std::string delimiter_;
 };
 
 #endif

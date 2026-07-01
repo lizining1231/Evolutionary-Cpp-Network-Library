@@ -7,7 +7,7 @@
 class Buffer {
   public:
     void appendData(const char *data, ssize_t length);
-    bool takeData(std::string &request, const std::string &delimeter);
+    bool takeData(std::string &request, const std::string &delimiter);
 
   private:
     std::string recv_buffer_;

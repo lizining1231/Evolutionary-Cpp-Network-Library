@@ -65,7 +65,7 @@ int main(int argc, char *argv[]) {
         for (unsigned int i = 0; i < thread_count; i++) {
             auto loop = std::make_unique<EventLoop>(port);
             loop->setMessageCallback(handleMessage);
-            loop->setDelimeter("\r\n\r\n");
+            loop->setDelimiter("\r\n\r\n");
             loops.push_back(std::move(loop));
         }
 
