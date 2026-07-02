@@ -68,15 +68,15 @@ void Connection::send(int client_fd) {
 
         if (n > 0) {
             send_buffer_.erase(0, n);
+
         } else {
             // n < 0
             if (errno == EAGAIN || errno == EWOULDBLOCK) {
                 if (enable_write_) {
                     enable_write_();
                 }
-                send_blocked_ = true;
-
                 return;
+
             } else {
                 std::cerr << "[ERROR] Send error (fd:" << client_fd << "): " << strerror(errno) << std::endl;
                 close_cb_(client_fd, connmgr_);
@@ -85,11 +85,8 @@ void Connection::send(int client_fd) {
         }
     }
 
-    if (send_blocked_) {
-        if (disable_write_) {
-            disable_write_();
-        }
-        send_blocked_ = false;
+    if (disable_write_) {
+        disable_write_();
     }
 }
 

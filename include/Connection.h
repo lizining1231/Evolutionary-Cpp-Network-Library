@@ -27,7 +27,6 @@ class Connection {
 
   private:
     int client_fd_;
-    bool send_blocked_;
     std::string delimiter_;
     std::string send_buffer_;
 
