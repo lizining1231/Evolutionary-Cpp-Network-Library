@@ -39,6 +39,7 @@ void EventLoop::start() {
     int listen_fd = listener_.getFd();
 
     running_ = true;
+    loop_thread_id_ = std::this_thread::get_id();
 
     while (running_) {
         poller_.wait();
@@ -91,12 +92,39 @@ void EventLoop::start() {
             }
 
         });
+
+        std::vector<std::function<void()>> local_tasks;
+        {
+            std::lock_guard<std::mutex> lock(mutex_);
+            local_tasks.swap(tasks_);    // 不直接执行tasks_, 避免回调中调用queueInloop导致死锁
+        }
+        for (auto &task : local_tasks) {
+            task();
+        }
+
     }
 }
 
 void EventLoop::stop() {
     running_ = false;
 
+    uint64_t one = 1;
+    ::write(wakeup_fd_, &one, sizeof(one));
+}
+
+void EventLoop::runInLoop(std::function<void()> cb) {
+    if (std::this_thread::get_id() == loop_thread_id_) {
+        cb();
+    } else {
+        queueInLoop(std::move(cb));
+    }
+}
+
+void EventLoop::queueInLoop(std::function<void()> cb) {
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        tasks_.push_back(std::move(cb));
+    }
     uint64_t one = 1;
     ::write(wakeup_fd_, &one, sizeof(one));
 }
