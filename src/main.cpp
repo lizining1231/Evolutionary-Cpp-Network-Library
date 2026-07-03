@@ -1,4 +1,5 @@
 #include "EventLoop.h"
+#include "logger.h"
 #include <cstdlib>
 #include <cstring>
 #include <iostream>
@@ -43,12 +44,12 @@ int main(int argc, char *argv[]) {
         port = std::atoi(argv[1]);
 
         if (port <= 0 || port > 65535) {
-            std::cerr << "错误: 端口号必须在1-65535之间" << std::endl;
+            LOG_ERROR("Port must be between 1 and 65535");
             return 1;
         }
     }
 
-    std::cout << "端口：" << port << std::endl;
+    LOG_INFO("Port: %d", port);
 
     try {
 
@@ -58,7 +59,7 @@ int main(int argc, char *argv[]) {
         unsigned int thread_count = 4;
         std::vector<std::thread> threads;
 
-        std::cout << "Starting " << thread_count << " threads" << std::endl;
+        LOG_INFO("Starting %u threads", thread_count);
 
         std::vector<std::unique_ptr<EventLoop>>loops;
 
@@ -71,7 +72,7 @@ int main(int argc, char *argv[]) {
 
         for (unsigned int i = 0; i < thread_count; i++) {
             threads.emplace_back([ptr = loops[i].get(), i]() {
-                std::cout << "[Thread " << i << "] starting..." << std::endl;
+                LOG_INFO("[Thread %u] starting...", i);
                 ptr -> start();
             });
         }
@@ -88,19 +89,19 @@ int main(int argc, char *argv[]) {
             t.join();
         }
 
-        std::cout << "TCP server stopped" << std::endl;
+        LOG_INFO("TCP server stopped");
         return 0;
 
     } catch (const std::runtime_error &e) {
-        std::cerr << "运行时错误：" << e.what() << std::endl;
+        LOG_ERROR("Runtime error: %s", e.what());
         return 1;
 
     } catch (const std::exception &e) {
-        std::cerr << "标准异常：" << e.what() << std::endl;
+        LOG_ERROR("Standard exception: %s", e.what());
         return 1;
 
     } catch (...) {
-        std::cerr << "未知异常" << std::endl;
+        LOG_ERROR("Unknown exception");
         return 1;
     }
 }

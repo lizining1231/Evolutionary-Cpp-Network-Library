@@ -1,5 +1,6 @@
 #include "EventLoop.h"
 #include "ConnectionManager.h"
+#include "logger.h"
 
 #include <csignal>
 #include <iostream>
@@ -22,7 +23,7 @@ EventLoop::EventLoop(int port)
     }
     poller_.addFd(wakeup_fd_);
 
-    std::cout << "the initialized TCP server on port" << port << std::endl;
+    LOG_INFO("TCP server initialized on port %d", port);
 }
 
 EventLoop::~EventLoop() {

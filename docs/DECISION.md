@@ -137,7 +137,7 @@
 
 ## 6月8日：关于资源释放职责梳理与优雅退出方案选型
 
-### 场景 🎯
+### 场景 
 
 发现 ConnectionManager::remove 中的删除顺序与职责划分不符合行业实践：
 
@@ -155,7 +155,7 @@ ConnectionManager::remove(fd)
 
 同时，当前 `Ctrl+C` 会直接 kill 进程，没有任何清理流程。
 
-### 分析 🔍
+### 分析 
 
 **问题一：Poller 职责不清**
 
@@ -171,7 +171,7 @@ Connection 持有 `client_fd_`，但析构时不自动 close。若某个路径�
 
 **核心阻塞链：** 无优雅退出 → 无法安全终止 EventLoop → 无法安全释放资源。
 
-### 方案 🛠️
+### 方案 
 
 **决策 1：Connection 资源管理**
 
@@ -213,7 +213,7 @@ Connection 持有 `client_fd_`，但析构时不自动 close。若某个路径�
 | ❌ 信号处理函数直接调 stop   | 信号处理函数中可做操作有限，不安全                            |
 | ✅ **原子标志 + 主线程轮询** | 信号只设 `atomic<bool>`，主线程 sleep 轮询，发现后遍历调 stop |
 
-### 综合改动 📋
+### 综合改动 
 
 | 文件                      | 改动                                                 | 原因          |
 | ----------------------- | -------------------------------------------------- | ----------- |
@@ -251,13 +251,13 @@ Connection 持有 `client_fd_`，但析构时不自动 close。若某个路径�
 
 ## 7月1日：#8 Connection 解除对 Poller 的耦合 — 回调注入方案
 
-### 场景 🎯
+### 场景 
 
 当前 `Connection` 以 **public 成员** 持有 `Poller*` 指针：
 
 ```cpp
 // Connection.h:26
-Poller *poller_;  // 👈 public，外部直接赋值
+Poller *poller_;  //  public，外部直接赋值
 ```
 
 在 `EventLoop::start()` 中直接侵入式赋值：
@@ -275,14 +275,14 @@ poller_->enableOut(client_fd);   // 注册 EPOLLOUT
 poller_->disableOut(client_fd);  // 注销 EPOLLOUT
 ```
 
-### 问题 🔴
+### 问题 
 
 | 问题 | 说明 |
 |:----|:------|
-| 🚫 **破坏封装** | `Poller*` 是 public 的，外部可随意修改 |
-| 🚫 **耦合过紧** | Connection 直接依赖 Poller 的具体 API，换 IO 模型（ET / io_uring）得改 Connection |
-| 🚫 **不安全** | 裸指针，无生命周期保证 |
-| 🚫 **架构异味** | #6 已完成 Poller 内部数据私有化，但 Connection 这头还留着后门 |
+|  **破坏封装** | `Poller*` 是 public 的，外部可随意修改 |
+|  **耦合过紧** | Connection 直接依赖 Poller 的具体 API，换 IO 模型（ET / io_uring）得改 Connection |
+|  **不安全** | 裸指针，无生命周期保证 |
+|  **架构异味** | #6 已完成 Poller 内部数据私有化，但 Connection 这头还留着后门 |
 
 ### 方案调研 🔍
 
@@ -314,7 +314,7 @@ EventLoop 每次循环遍历所有 Connection 检查 `send_buffer_` 是否为空
 
 - 评价：架构最纯粹，但引入 100ms 延迟 + O(n) 遍历开销 ❌
 
-### 决策依据 📊
+### 决策依据 
 
 | 对比维度 | 方案0 仅封装 | 方案1 回调注入 | 方案2 Event 抽象 | 方案3 纯拉模式 |
 |:---------|:----------:|:------------:|:--------------:|:------------:|
@@ -338,7 +338,7 @@ EventLoop 每次循环遍历所有 Connection 检查 `send_buffer_` 是否为空
 | `src/EventLoop.cpp` | accept 新连接时注入 lambda：`conn->setWriteCallbacks([this,fd](){...})` |
 | `src/ConnectionManager.cpp` | 移除 `Poller*` 参数传递，简化构造函数 |
 
-### 设计要点 💡
+### 设计要点 
 
 ```
 改前：
@@ -353,7 +353,161 @@ EventLoop 每次循环遍历所有 Connection 检查 `send_buffer_` 是否为空
     后续换 ET / io_uring，改 EventLoop 即可     ✅
 ```
 
-### 后续拓展 🚀
+### 后续拓展 
 
 方案 1 可平滑升级为方案 2：后续引入定时器（#11）或对象池（#21）时，可将 `std::function` 统一包裹为 `Event` 结构体，实现复用。
 
+
+
+---
+
+## 7月3日：#10 日志系统 — 编译期零开销同步日志先行，异步日志后续叠加
+
+### 场景
+
+当前项目日志散落在 4 个文件共 15 处，全部使用裸 `std::cout` / `std::cerr`：
+
+| 文件 | 处数 | 用途 |
+|:---|:---:|:---|
+| src/Connection.cpp | 4 | 断连/错误/warn 日志 |
+| src/EventLoop.cpp | 1 | 启动信息 |
+| src/SocketListener.cpp | 2 | 启动信息、客户端连接 |
+| src/main.cpp | 8 | 启动/异常/线程信息 |
+
+**三个痛点：**
+
+1. **压测无法关** — 只能 `> /dev/null 2>&1` 重定向，函数调用和格式化开销仍在
+2. **格式不统一** — `[DEBUG]`、`[ERROR]`、裸字符串混用
+3. **无级别过滤** — INFO 和 ERROR 混在一起
+
+### 分析
+
+**需求定义：**
+1. 编译期零开销 — Release 构建时日志代码完全不生成，连参数求值都没有
+2. 高性能 — 日常开发时日志不能拖累 QPS
+
+**两种日志模型的性能公式推导：**
+
+设 `N` = 每秒日志条数，`T_sc` = 一次 `write()` 系统调用耗时，`T_fmt` = 格式化一条日志的 CPU 时间，`B` = 异步日志攒批大小
+
+```
+同步日志前台 CPU/秒 = C_biz + N x T_sc + N x T_fmt
+
+异步日志前台 CPU/秒 = C_biz + N x T_fmt（syscall 卸载到后台线程）
+
+前台线程 CPU 节省 = N x T_sc（批处理因子 ~0.98，近似忽略）
+
+收益 = N x T_sc / (C_biz + N x T_sc + N x T_fmt)
+```
+
+**参数取值依据：**
+
+| 参数 | 数值 | 来源 |
+|:---|:---:|:---|
+| T_sc（write syscall） | ~0.5 us | Linux 性能实战，Intel i9-12900K 实测 ~85ns 最简 syscall，write 含数据拷贝保守取 0.5us |
+| T_fmt（格式化） | ~0.2 us | 业界估算，string 拼接 + 时间戳格式化 |
+| B（异步攒批） | ~50 条 | 4KB 缓冲区 / 80 字节每日志 |
+| 当前日志量 | ~400k logs/s | 200k QPS x 2 条/请求，4 线程均摊 |
+
+**代入当前数据（200k QPS, 4 线程）：**
+
+```
+每线程日志量 = 400k / 4 = 100k logs/s
+每线程业务 CPU ≈ 0.93 核秒（接近满负载）
+
+收益 = 100k x 0.5us / (0.93 + 100k x 0.5us + 100k x 0.2us)
+     = 0.05 / (0.93 + 0.05 + 0.02)
+     = 0.05 / 1.0
+     = 5%
+```
+
+当前异步收益仅 ~5%，低于 10% 的投入产出比门槛。
+
+**异步日志收益 >= 10% 的临界条件：**
+
+```
+N x T_sc / (C_biz + N x T_sc + N x T_fmt) >= 0.1
+
+代入 T_sc = 0.5us, T_fmt = 0.2us, C_biz = 1 核秒 = 10^6 us：
+
+N x 0.5 / (10^6 + N x 0.5 + N x 0.2) >= 0.1
+N x 0.5 >= 100,000 + N x 0.05 + N x 0.02
+N x 0.43 >= 100,000
+N >= 232,558 logs/s/线程
+```
+
+等价于 **~116k QPS/线程**（每请求 2 条日志）。当前单线程 ~50k QPS，距此还有一倍差距。
+
+### 方案
+
+**二阶段路线图：**
+
+```
+         Step 1（现在）               Step 2（未来，QPS 翻倍后）
+    ┌─────────────────────┐     ┌──────────────────────┐
+    │  编译期宏开关        │     │  异步日志（底层替换）  │
+    │  + 高效同步日志      │ ──▶ │                      │
+    │                     │     │  双缓冲 + 后台线程     │
+    │  Release: 零开销     │     │  前台零阻塞           │
+    │  Debug: 比 cout 快   │     │  API 不变，零改动     │
+    └─────────────────────┘     └──────────────────────┘
+             当前收益 >0%                收益 >10%
+         实现量：1 header，~200 行
+```
+
+**Step 1 关键设计决策：**
+
+| 决策 | 选项 | 选择 |
+|:---|:---|:---:|
+| 编译期控制方式 | (a) NDEBUG 全关 (b) 自定义宏 LOG_LEVEL 分级控制 | **方案 b** — Release 构建默认 LOG_LEVEL_NONE，Debug 构建默认 LOG_LEVEL_INFO |
+| API 风格 | (a) printf 式 (b) 流式 | **方案 a** — 编译期比流式少生成代码，配合 fmtlib 性能更优 |
+| 输出方式 | (a) write() (b) fwrite 攒批 (c) cout | **方案 b** — fwrite 用户态缓冲区，4KB 才一次 syscall，syscall 减少 3 个数量级 |
+| 时间戳精度 | (a) 秒级 (b) 毫秒级 (c) 微秒级 | **方案 c** — 面试亮点，clock_gettime 通过 vDSO 仅 ~50ns |
+
+**Step 1 替换清单：**
+
+| 文件 | 替换内容 |
+|:---|:---|
+| src/Connection.cpp | 4 处 cout/cerr -> LOG_DEBUG / LOG_ERROR |
+| src/EventLoop.cpp | 1 处 cout -> LOG_INFO |
+| src/SocketListener.cpp | 2 处 cout -> LOG_INFO |
+| src/main.cpp | 8 处 cout/cerr -> LOG_INFO / LOG_ERROR |
+
+### 综合对比
+
+**为什么现阶段不上异步日志：**
+
+| 对比维度 | 同步日志（Step 1） | 异步日志（Step 2） |
+|:---------|:---------------:|:---------------:|
+| 当前收益 | ✅ 编译期零开销（Release） | ❌ 仅 ~5%，不够门槛 |
+| 实现复杂度 | ✅ 1 header，~200 行 | ⚠️ 双缓冲 + 后台线程，~500+ 行 |
+| 面试含金量 | ✅ 编译期零开销设计 | ✅ 异步日志架构 |
+| 可拓展性 | ✅ 底层可被异步替换 | — |
+
+**为什么 cout 一定得换：**
+
+`std::cout << ... << std::endl` 每次调用包含一次 `write()` 系统调用（endl = flush = write），400k logs/s 意味着 400k syscall/s。`fwrite` 攒批后仅需 ~100 次 syscall/s，syscall 开销从 **~20% CPU** 降至 **~0.005% CPU**，这才是当前最大的优化空间。
+
+### 最终决策
+
+**采用二阶段路线图：Step 1 同步日志先行，Step 2 异步日志待单线程 QPS 突破 ~100k 后叠加**
+
+具体改动：
+
+| 文件 | 改动 |
+|:---|:---|
+| include/Logger.h | 新建，单头文件日志系统，宏开关 + fwrite 攒批 |
+| src/Connection.cpp | cout/cerr -> LOG_DEBUG / LOG_ERROR |
+| src/EventLoop.cpp | cout -> LOG_INFO |
+| src/SocketListener.cpp | cout -> LOG_INFO |
+| src/main.cpp | cout/cerr -> LOG_INFO / LOG_ERROR |
+| CMakeLists.txt | Release 构建默认 -DLOG_LEVEL=LOG_LEVEL_NONE -DNDEBUG |
+
+### 预期效果
+
+| 指标 | 改前（cout） | 改后 Release（宏全关） | 改后 Debug（同步日志） |
+|:---|:---:|:---:|:---:|
+| 日志 syscall 次数 | 400k/s | 0 | ~100/s |
+| 日志 CPU 开销 | ~20% | 0% | ~0.005% |
+| QPS 影响 | 有（20% CPU 被日志吃掉） | 零 | 可忽略 |
+| 代码行数 | 15 处散落 | 0（空宏） | 替换为统一 API |

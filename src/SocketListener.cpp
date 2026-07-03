@@ -1,4 +1,5 @@
 #include "SocketListener.h"
+#include "logger.h"
 
 #include <cstring>
 
@@ -55,7 +56,7 @@ void SocketListener::initSocket(int port) {
     if (listen(listen_fd_, BACKLOG) < 0) {
         throw std::runtime_error("Listen failed");
     }
-    std::cout << "Server listening on port" << port << std::endl;
+    LOG_INFO("Server listening on port%d", port);
 }
 
 int SocketListener::accept() {
@@ -81,8 +82,7 @@ int SocketListener::accept() {
     inet_ntop(AF_INET, &client_addr.sin_addr, client_ip, INET_ADDRSTRLEN);
 
     // 将网络字节序转化为主机字节序
-    std::cout << client_ip << ":" << ntohs(client_addr.sin_port)
-              << "(fd:" << client_fd << ")" << std::endl;
+    LOG_INFO("%s:%d(fd:%d)", client_ip, ntohs(client_addr.sin_port), client_fd);
 
     return client_fd;
 }

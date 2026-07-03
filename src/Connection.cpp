@@ -1,5 +1,6 @@
 #include "Connection.h"
 #include "EventLoop.h"
+#include "logger.h"
 
 #include <cerrno>
 #include <iostream>
@@ -33,14 +34,14 @@ void Connection::recv(int client_fd) {
 
     if (bytes_read <= 0) {
         if (bytes_read == 0) {
-            std::cout << "[DEBUG] Client disconnected (fd:" << client_fd << ")" << std::endl;
+            LOG_DEBUG("Client disconnected (fd:%d)", client_fd);
             close_cb_(client_fd, connmgr_);
             return;
         } else {
             if (errno == EAGAIN || errno == EWOULDBLOCK) {
                 return;
             } else {
-                std::cerr << "[ERROR] Receive error (fd:" << client_fd << "): " << strerror(errno) << std::endl;
+                LOG_ERROR("Receive error (fd:%d): %s", client_fd, strerror(errno));
                 close_cb_(client_fd, connmgr_);
                 return;
             }
@@ -53,7 +54,7 @@ void Connection::recv(int client_fd) {
     std::string request;
     while (recv_buffer_.takeData(request, delimiter_)) {
         if (!handler_) {
-            std::cerr << "[WARN] handler is null, skipping request" << std::endl;
+            LOG_WARN("handler is null, skipping request");
             continue;
         }
         std::string response = handler_(request.c_str(), request.size());
@@ -78,7 +79,7 @@ void Connection::send(int client_fd) {
                 return;
 
             } else {
-                std::cerr << "[ERROR] Send error (fd:" << client_fd << "): " << strerror(errno) << std::endl;
+                LOG_ERROR("Send error (fd:%d): %s", client_fd, strerror(errno));
                 close_cb_(client_fd, connmgr_);
                 return;
             }
