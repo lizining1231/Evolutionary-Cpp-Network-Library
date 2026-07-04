@@ -14,14 +14,14 @@ Connection::~Connection() {
     ::close(client_fd_);
 }
 
-void Connection::setCloseCallback(CloseCallback close_cb,
+void Connection::setCloseCallback(CloseCallback cb,
                                   ConnectionManager *connmgr) {
-    close_cb_ = close_cb;
+    cb_ = cb;
     connmgr_ = connmgr;
 }
 
-void Connection::setMessageCallback(MessageCallback handleMessage) {
-    handler_ = handleMessage;
+void Connection::setMessageCallback(MessageCallback cb) {
+    handler_ = cb;
 }
 
 void Connection::setDelimiter(const std::string &delim) { delimiter_ = delim; }
@@ -35,14 +35,14 @@ void Connection::recv(int client_fd) {
     if (bytes_read <= 0) {
         if (bytes_read == 0) {
             LOG_DEBUG("Client disconnected (fd:%d)", client_fd);
-            close_cb_(client_fd, connmgr_);
+            cb_(client_fd, connmgr_);
             return;
         } else {
             if (errno == EAGAIN || errno == EWOULDBLOCK) {
                 return;
             } else {
                 LOG_ERROR("Receive error (fd:%d): %s", client_fd, strerror(errno));
-                close_cb_(client_fd, connmgr_);
+                cb_(client_fd, connmgr_);
                 return;
             }
         }
@@ -80,7 +80,7 @@ void Connection::send(int client_fd) {
 
             } else {
                 LOG_ERROR("Send error (fd:%d): %s", client_fd, strerror(errno));
-                close_cb_(client_fd, connmgr_);
+                cb_(client_fd, connmgr_);
                 return;
             }
         }

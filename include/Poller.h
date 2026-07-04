@@ -18,7 +18,7 @@ class Poller {
     void enableOut(int client_fd);
     void disableOut(int client_fd);
 
-    void iterateEvents(EventCallback event_cb);
+    void iterateEvents(EventCallback cb);
 
   private:
     int port_;

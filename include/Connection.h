@@ -20,7 +20,7 @@ class Connection {
     void recv(int client_fd);
 
     void setMessageCallback(MessageCallback cb);
-    void setCloseCallback(CloseCallback close_cb, ConnectionManager *connmgr);
+    void setCloseCallback(CloseCallback cb, ConnectionManager *connmgr);
     void setDelimiter(const std::string &delim);
 
     void setWriteCallbacks(std::function<void()> enable, std::function<void()> disable);
@@ -32,7 +32,7 @@ class Connection {
 
     Buffer recv_buffer_;
     ConnectionManager *connmgr_;
-    CloseCallback close_cb_;
+    CloseCallback cb_;
     MessageCallback handler_;
 
     std::function<void()> enable_write_;

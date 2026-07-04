@@ -53,8 +53,8 @@ void Poller::disableOut(int client_fd) {
     epoll_ctl(epoll_fd_, EPOLL_CTL_MOD, client_fd, &ev);
 }
 
-void Poller::iterateEvents(EventCallback event_cb) {
+void Poller::iterateEvents(EventCallback cb) {
     for (int i = 0; i < ready_count_; i++) {
-        event_cb(events_[i].data.fd, events_[i].events);
+        cb(events_[i].data.fd, events_[i].events);
     }
 }
