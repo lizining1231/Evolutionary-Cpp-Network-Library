@@ -9,7 +9,7 @@
 
 class ConnectionManager {
   public:
-    explicit ConnectionManager(Poller *poller_);
+    explicit ConnectionManager(Poller *poller);
     Connection *getconn(int client_fd);
     void add(int client_fd);
     void remove(int client_fd);

@@ -28,7 +28,7 @@ class EventLoop {
     SocketListener listener_;
     Poller poller_;
     ConnectionManager connmgr_;
-    MessageCallback user_handler;
+    MessageCallback user_handler_;
     bool running_;
     std::string delimiter_;
 

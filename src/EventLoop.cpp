@@ -32,7 +32,7 @@ EventLoop::~EventLoop() {
     }
 }
 
-void EventLoop::setMessageCallback(MessageCallback cb) { user_handler = cb; }
+void EventLoop::setMessageCallback(MessageCallback cb) { user_handler_ = cb; }
 
 void EventLoop::setDelimiter(const std::string &delim) { delimiter_ = delim; }
 
@@ -55,7 +55,7 @@ void EventLoop::start() {
                     return;
                 }
 
-                conn->setMessageCallback(user_handler);
+                conn->setMessageCallback(user_handler_);
                 conn->setCloseCallback(onConnectionClose, &connmgr_);
                 conn->setDelimiter(delimiter_);
                 conn->setWriteCallbacks(
