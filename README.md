@@ -1,3 +1,151 @@
+# C++ Evolutionary Network Library
+
+## 📖 Project Overview
+
+A **data-driven** network library learning project implemented through **staged evolutionary development**, aiming to gain an in-depth understanding of the core principles of C++ network programming, memory management, and concurrency optimization.
+
+### 🎯 Core Learning Philosophy
+- **Independent Thinking**: Personal implementation, **not an online course/training project**. Authenticity is ensured with timely updates including decision logs, benchmark reports, performance reports, architecture diagrams, and commit messages that follow a detailed Issue-Change-Result structure.
+- **Learning Through Pitfalls**: Starting from the simplest blocking I/O, gradually evolving to select, epoll, and io_uring. At each step, I personally experience *"why the next step is needed"* and document the performance improvement process.
+- **Data-Driven**: Each stage has clear, specific, and realistic performance metric comparisons and issue discovery. **Toolchain**: wrk, top, perf, Valgrind, strace, etc.
+- **Depth-First**: Reject black-box calls, confront underlying principles head-on, and produce blog posts as documentation.
+- **Architectural Evolution**: The project follows a from-scratch evolutionary architecture—no premature optimization, allowing the architecture to emerge naturally from problems encountered.
+
+### 📝 My Blog
+https://mp.weixin.qq.com/s/Kn-uA6J0l83c6KVfErxMQQ
+
+### 📆 Staged Plan
+
+**Stage 1: Implement a blocking I/O model echo server** ✅
+
+**Core Implementation & Achievements**
+- Implemented a single-threaded blocking I/O model echo server
+
+**Stage Outcomes**
+- Blog: First technical blog post — *"Starting from Blocking: The Essence of accept() and recv() Blocking and Wake-up Mechanisms"*
+
+**Current Pain Points**
+- Only supports a single connection; the second connection blocks
+
+
+**Stage 2: Introducing select — Multi-step refactoring from server to network library** ✅
+
+**Core Implementation Summary**
+- Refactored from blocking I/O to select multiplexing model, supporting multiple concurrent client connections
+- Added timeout mechanism to the event loop to prevent a few connections from blocking overall processing
+- Created the Buffer class to enable byte slicing for uneven scheduling and lay the foundation for per-connection independent buffers
+- Created the SocketListener class to replace the Socket class
+- Introduced the Connection class and ConnectionManager to implement per-connection independent buffers, resolving severe P99 latency fluctuations
+- Encapsulated blocking I/O logic into SelectPoller to facilitate future I/O model replacement
+- Created the EventLoop class and completely removed the TCPServer god class, distributing functionality across components, and split the three major functions from Stage 1 into multiple smaller methods to reduce coupling
+- Implemented multiple function pointer callbacks to decouple the network layer from business logic
+
+**Performance Troubleshooting** (documented in blog posts)
+- When switching the environment from local loopback to host-to-container service benchmarking, QPS plummeted from 8500 → 400. Investigation identified the tcp_tw_reuse parameter; after fixing, performance recovered and increased to 11000
+
+- Tests revealed severe P99 random spikes up to 1000ms. Investigation identified uneven scheduling + shared buffer resource contention. After architectural evolution (adding Buffer class to Connection class), P99 stabilized at 10-13ms
+
+- 10k QPS was far from reaching the select bottleneck. Investigation identified a TIME-WAIT short-connection storm. After changing HTTP responses to persistent connections, QPS improved from 10k → 85k
+
+**Three Key Insights**
+1. Recognize that this is not a high-performance echo server, but a network framework. Business logic and the network layer must be decoupled; otherwise, all subsequent optimizations will be coupled
+2. Do not rely on a single round of data for judgment. Do not make multiple changes simultaneously without testing, as this easily leads to attribution errors
+3. Continuously dismantle the TCPServer god class to approach a clear architecture, ensuring this is a component-based toolkit rather than a black box
+
+**Stage Outcomes**
+- Concurrent connections: echo: 1 connection → select: supports 1024 persistent connections, 1800 short connections
+- P99 latency: 3.95ms at 100 concurrency, 5.11ms at 200 concurrency, 10.95ms at 400 concurrency, collapses at 600 concurrency (same symptoms as epoll stage, under repair)
+- **QPS: echo: 8.5k on local loopback with 1 connection → 85k at 100 concurrency → 73k at 1000 concurrency → collapses to 34k at 1200 concurrency**
+
+- Architecture: Achieved decoupling of components, connection layer, business layer, and network layer, with preliminary responsibility division
+- Blogs:
+  - *"Copy Constructor: Why Must It Use & Reference? What Happens with Pass-by-Value and Pass-by-Pointer"*
+  - *"Two Consecutive 95% QPS Plunges: Interview Myth-Busting + First Performance Debugging — Seven Pitfalls in a Row?"*
+  - *"Severe P99 Jitter Caused by Shared Buffers — Why Buffer and Connection Classes Are Essential"*
+
+**Current Stage Challenges**
+
+- The select 1024 file descriptor bottleneck limits persistent connections
+
+**Stage 3: Switching I/O model to epoll and introducing multithreading** (In Progress)
+
+**Core Implementation Summary**
+
+**Step 1: select → epoll LT mode**
+- Completely removed fd_set, replaced with epoll_create1 + epoll_ctl + epoll_wait
+- Main loop changed from O(N) full-connection iteration to O(1) ready-event array iteration
+- Set listen_fd and client_fd to non-blocking, covering EAGAIN branches for accept/recv/send
+- Encapsulated enableOut/disableOut methods to isolate epoll_ctl details
+- Fixed the issue where EPOLLOUT could not be removed after send() EAGAIN (introduced send_blocked_ member variable, breaking the temporary variable lifetime trap)
+
+**Step 2: Multithreading extension (REUSEPORT + one thread per event loop)**
+- Introduced `std::thread`, leveraging `SO_REUSEPORT` for kernel-level load balancing
+- Each thread independently creates an EventLoop and binds to the same port — zero sharing, zero locking
+- Added graceful shutdown mechanism (SIGINT/SIGTERM signal handling + stop/join)
+
+**Performance Troubleshooting & Bug Fixes**
+
+1. **70% epoll_ctl error rate**: removeFd called close(fd) before epoll_ctl(DEL), causing EBADF. Fix: swap order — call epoll_ctl first, then close → error rate dropped to 0%
+
+2. **Process crash at 2000 concurrency in container**: container fd limit defaulted to 1024. Fix: set nofile=1048576 in docker-compose → supports 100,000 concurrency
+
+3. **P99 collapse to 1.88s at 200+ concurrency**: HTTP response forced `Connection: close`, causing a short-connection storm. Fix: changed to `Connection: keep-alive` → P99 dropped from 1.88s to 3.85ms
+
+4. **Data loss in Buffer::takeData**: delimiter length hardcoded to 4, causing data loss with custom delimiters. Fix: changed to `delimiter.length()` for dynamic retrieval
+
+5. **Default constructor of Connection causing undefined behavior**: std::map::operator[] creates garbage objects. Fix: `Connection() = delete`, enforcing parameterized construction at compile time
+
+6. **Naming and architecture cleanup**: SelectPoller → Poller (eliminated select legacy naming), TCPserver → EventLoop, split large files into 6 independent compilation units
+
+**Stage Outcomes**
+
+- **Maximum connections**: select 1024 → epoll 40,000+ (97x improvement, no longer limited by 1024, supports 40,000+ concurrent connections)
+- **Crash starting point**: single-threaded 400 concurrency → multithreaded 20,000 concurrency (50x improvement)
+- **P99 @ 400 concurrency**: single-threaded 523ms → multithreaded 17.60ms (96.6% reduction)
+- **QPS Comparison**:
+  - select single-threaded peak (in container): 85k
+  - epoll single-threaded LT mode (local loopback): 85k → 90k (roughly flat)
+  - epoll single-threaded LT mode (local loopback, after fixing short-connection issue): 90k → 250k (177% improvement)
+  - epoll + REUSEPORT (12 threads, in container): 116k
+- **Architecture**: Completed decoupling of network layer, connection layer, and business layer, supporting external graceful shutdown
+
+**Current Challenges**
+
+- epoll ET mode not yet implemented; LT mode still has significant epoll_ctl call overhead
+- In multithreaded scenarios, each thread holds independent connections; connection migration and load rebalancing are not yet implemented
+
+**Stage 4: Large-scale performance analysis** (Not yet implemented)
+- Establish automated benchmarking framework
+- Docker deployment
+- Deliverable: Comprehensive performance benchmark suite
+
+
+**Stage 5: I/O model upgrade again**
+- epoll → io_uring
+
+
+**Stage 6: Memory optimization exploration**
+- Introduce Message object pool (first optimization point)
+- Valgrind analysis: malloc calls reduced by ?%
+- Potential performance regression due to false sharing
+- Cache line alignment (alignas 64)
+- Potential performance regression due to false sharing
+- Cache line alignment (alignas 64)
+- Deliverable: Memory optimization special report
+
+**Stage 7: Protocol layer enhancement**
+- Implement zero-copy forwarding prototype
+- Reference-counted buffer design
+- Performance comparison: CPU reduction of ?% in large-message scenarios
+- Deliverable: Zero-copy technology validation report
+
+### Final Comparative Data (Week 3 vs. Week 8)
+- Maximum connections: ? → ? (?x)
+- P99 latency: ?ms → ?ms (?% reduction)
+- CPU usage: ?% → ?% (?% reduction)
+- malloc calls: ? calls/sec → ? calls/sec (?% reduction)
+
+
 # C++演进式网络库
 
 ## 📖 项目概述
@@ -145,38 +293,6 @@ https://mp.weixin.qq.com/s/Kn-uA6J0l83c6KVfErxMQQ
 - CPU使用率：？% → ？%（降低？%）
 - malloc调用：？次/秒 → ？次/秒（减少？%）
 
-### 架构说明
-```mermaid
-flowchart TD
-    EventLoop[EventLoop<br>主事件循环<br>协调所有组件，驱动整个服务器]
-
-    EventLoop --> SocketListener
-    EventLoop --> SelectPoller
-    EventLoop --> ConnectionManager
-
-    SocketListener[SocketListener<br>套接字监听器<br>接受新连接]
-    SelectPoller[SelectPoller<br>I/O多路复用<br>select<br>监控socket事件]
-    ConnectionManager[ConnectionManager<br>多连接管理器<br>fd->Connection映射]
-
-    ActiveConns[活动连接集合]
-
-    SocketListener --> ActiveConns
-    SelectPoller --> ActiveConns
-    ConnectionManager --> ActiveConns
-
-    ActiveConns --> Conn1
-    ActiveConns --> Conn2
-    ActiveConns --> ConnN
-
-    Conn1[Connection1] --> Buffer1
-    Conn2[Connection2] --> Buffer2
-    ConnN[ConnectionN] --> BufferN
-
-    Buffer1[Buffer<br>数据缓冲区<br>消息回调<br>关闭回调]
-    Buffer2[Buffer<br>数据缓冲区<br>消息回调<br>关闭回调]
-    BufferN[Buffer<br>数据缓冲区<br>消息回调<br>关闭回调]
-```
-
            
 核心组件：
 | 层级 | 职责 |
@@ -185,17 +301,6 @@ flowchart TD
 | 连接层 | 管理连接、数据收发 |
 | 缓冲区组件层 | 处理数据的拆包 |
 | 业务层 | 用户注册业务回调（图中的TCP/HTTP响应仅为示例用，可忽略） |
-
-### ⚒️工具说明
-
-| 组件 | 版本 |
-|------|---------|
-| Ubuntu | 24.04 |
-| Linux内核 | 6.6.87.2 |
-| Docker | 29.2.1 |
-| WSL2 | 6.6.87.2 |
-| CMake | 3.28.3 |
-| GCC | 13.3.0 |
 
 
 
