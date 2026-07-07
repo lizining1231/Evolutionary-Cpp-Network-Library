@@ -13,8 +13,7 @@
 
 // EventLoop类的实现
 EventLoop::EventLoop(int port)
-    : listener_(port), poller_(listener_.getFd()), connmgr_(&poller_),
-      delimiter_("") {
+    : listener_(port), poller_(listener_.getFd()), connmgr_(&poller_) {
     signal(SIGPIPE, SIG_IGN); // 防止Fin包未收到时send数据导致进程被砍
 
     wakeup_fd_ = eventfd(0, EFD_NONBLOCK);
@@ -34,7 +33,9 @@ EventLoop::~EventLoop() {
 
 void EventLoop::setMessageCallback(MessageCallback cb) { user_handler_ = cb; }
 
-void EventLoop::setDelimiter(const std::string &delim) { delimiter_ = delim; }
+void EventLoop::setDecoder(std::unique_ptr<FrameDecoder> decoder) {
+    decoder_ = std::move(decoder);
+}
 
 void EventLoop::start() {
     int listen_fd = listener_.getFd();
@@ -57,7 +58,7 @@ void EventLoop::start() {
 
                 conn->setMessageCallback(user_handler_);
                 conn->setCloseCallback(onConnectionClose, &connmgr_);
-                conn->setDelimiter(delimiter_);
+                conn->setDecoder(decoder_->clone());
                 conn->setWriteCallbacks(
                     [this, new_fd]() { poller_.enableOut(new_fd); },
                     [this, new_fd]() { poller_.disableOut(new_fd); }

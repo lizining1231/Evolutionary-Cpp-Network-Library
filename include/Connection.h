@@ -2,6 +2,7 @@
 #define CONNECTION_H
 
 #include "Buffer.h"
+#include "decoder/FrameDecoder.h"
 #include <string>
 #include <functional>
 
@@ -21,13 +22,13 @@ class Connection {
 
     void setMessageCallback(MessageCallback cb);
     void setCloseCallback(CloseCallback cb, ConnectionManager *connmgr);
-    void setDelimiter(const std::string &delim);
+    void setDecoder(std::unique_ptr<FrameDecoder> decoder);
 
     void setWriteCallbacks(std::function<void()> enable, std::function<void()> disable);
 
   private:
     int client_fd_;
-    std::string delimiter_;
+    std::unique_ptr<FrameDecoder> decoder_;
     std::string send_buffer_;
 
     Buffer recv_buffer_;

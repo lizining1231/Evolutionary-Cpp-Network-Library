@@ -1,5 +1,7 @@
 #include "EventLoop.h"
+#include "decoder/DelimiterDecoder.h"
 #include "logger.h"
+
 #include <cstdlib>
 #include <cstring>
 #include <iostream>
@@ -66,7 +68,7 @@ int main(int argc, char *argv[]) {
         for (unsigned int i = 0; i < thread_count; i++) {
             auto loop = std::make_unique<EventLoop>(port);
             loop->setMessageCallback(handleMessage);
-            loop->setDelimiter("\r\n\r\n");
+            loop->setDecoder(std::make_unique<DelimiterDecoder>("\r\n\r\n"));
             loops.push_back(std::move(loop));
         }
 
