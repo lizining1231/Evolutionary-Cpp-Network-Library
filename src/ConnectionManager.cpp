@@ -37,3 +37,11 @@ void onConnectionClose(int fd, ConnectionManager *connmgr) {
     }
     connmgr->remove(fd);
 }
+
+void ConnectionManager::forEachConn(std::function<void(Connection*)> cb){
+    for (auto &conn_ptr : connections_) {
+        if (conn_ptr) {
+           cb(conn_ptr.get());
+        }
+    }
+}

@@ -8,7 +8,8 @@
 #include <unistd.h>
 #include <cstring>
 
-Connection::Connection(int client_fd) : client_fd_(client_fd) {}
+Connection::Connection(int client_fd) : client_fd_(client_fd),
+                                        last_active_time_(std::chrono::steady_clock::now()) {}
 
 Connection::~Connection() {
     ::close(client_fd_);
@@ -50,6 +51,8 @@ void Connection::recv(int client_fd) {
         }
     }
 
+    touch();
+
     recv_buffer_.appendData(temp_buffer, bytes_read);
 
     // 解析 recv_buffer_，调 handler 生成响应，放入 send_buffer_
@@ -85,6 +88,7 @@ void Connection::send(int client_fd) {
                 return;
             }
         }
+        touch();
     }
 
     if (disable_write_) {
@@ -96,4 +100,12 @@ void Connection::setWriteCallbacks(std::function<void()> enable,
                                    std::function<void()> disable) {
     enable_write_ = std::move(enable);
     disable_write_ = std::move(disable);
+}
+
+void Connection::touch(){
+    last_active_time_ = std::chrono::steady_clock::now();
+}
+
+std::chrono::steady_clock::time_point Connection::getLastActiveTime() const {
+    return last_active_time_;
 }

@@ -5,6 +5,7 @@
 #include "decoder/FrameDecoder.h"
 #include <string>
 #include <functional>
+#include <chrono>
 
 class ConnectionManager;
 
@@ -26,6 +27,10 @@ class Connection {
 
     void setWriteCallbacks(std::function<void()> enable, std::function<void()> disable);
 
+    int getFd() const { return client_fd_; }
+    void touch();
+    std::chrono::steady_clock::time_point getLastActiveTime() const;
+
   private:
     int client_fd_;
     std::unique_ptr<FrameDecoder> decoder_;
@@ -36,6 +41,8 @@ class Connection {
     CloseCallback cb_;
     MessageCallback handler_;
 
+    std::chrono::steady_clock::time_point last_active_time_;
+    
     std::function<void()> enable_write_;
     std::function<void()> disable_write_;
 };

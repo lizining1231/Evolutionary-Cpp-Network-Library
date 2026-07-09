@@ -47,6 +47,8 @@ void EventLoop::start() {
     running_ = true;
     loop_thread_id_ = std::this_thread::get_id();
 
+    startIdleTimeout();
+
     while (running_) {
         poller_.wait();
 
@@ -136,6 +138,20 @@ void EventLoop::queueInLoop(std::function<void()> cb) {
     }
     uint64_t one = 1;
     ::write(wakeup_fd_, &one, sizeof(one));
+}
+
+void EventLoop::startIdleTimeout() {
+    runEvery(std::chrono::seconds(1), [this]() {
+        auto now = std::chrono::steady_clock::now();
+        auto timeout = std::chrono::seconds(60);
+
+        connmgr_.forEachConn([&](Connection *conn) {
+            if (now - conn->getLastActiveTime() > timeout) {
+                LOG_INFO("[IdleTimeout] fd:%d idle timeout, close", conn->getFd());
+                onConnectionClose(conn->getFd(), &connmgr_);
+            }
+        });
+    });
 }
 
 TimerQueue::TimerId EventLoop::runAt(

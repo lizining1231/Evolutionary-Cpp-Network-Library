@@ -33,9 +33,10 @@ class EventLoop {
     TimerQueue::TimerId runAfter(std::chrono::milliseconds delay,
                               TimerQueue::TimerCallback cb);
     TimerQueue::TimerId runEvery(std::chrono::milliseconds interval,
-                              TimerQueue::TimerCallback cb);                          
+                              TimerQueue::TimerCallback cb);
 
   private:
+    void startIdleTimeout();
     SocketListener listener_;
     Poller poller_;
     ConnectionManager connmgr_;
