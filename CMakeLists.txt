@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.10)
 project(cpp-im-gateway LANGUAGES C CXX)
 
-# 改为C++17，optional需要C++17
+# C++17，optional需要
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
@@ -16,6 +16,7 @@ add_executable(TCPserver
     src/ConnectionManager.cpp
     src/EventLoop.cpp
     src/decoder/DelimiterDecoder.cpp
+    src/TimerQueue.cpp
 )
 
 # 包含目录 - 添加 include 目录

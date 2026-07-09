@@ -1,6 +1,7 @@
 #include "EventLoop.h"
 #include "ConnectionManager.h"
 #include "logger.h"
+#include "TimerQueue.h"
 
 #include <csignal>
 #include <iostream>
@@ -13,7 +14,9 @@
 
 // EventLoop类的实现
 EventLoop::EventLoop(int port)
-    : listener_(port), poller_(listener_.getFd()), connmgr_(&poller_) {
+    : listener_(port), poller_(listener_.getFd()), connmgr_(&poller_),
+      timer_queue_(this) {
+
     signal(SIGPIPE, SIG_IGN); // 防止Fin包未收到时send数据导致进程被砍
 
     wakeup_fd_ = eventfd(0, EFD_NONBLOCK);
@@ -21,6 +24,7 @@ EventLoop::EventLoop(int port)
         throw std::runtime_error("eventfd creation failed");
     }
     poller_.addFd(wakeup_fd_);
+    poller_.addFd(timer_queue_.getTimerFd());
 
     LOG_INFO("TCP server initialized on port %d", port);
 }
@@ -68,6 +72,9 @@ void EventLoop::start() {
                 uint64_t one;
                 ::read(wakeup_fd_, &one, sizeof(one));
 
+            } else if (fd == timer_queue_.getTimerFd()) {
+                timer_queue_.handleRead();
+
             } else {
                 Connection *conn = connmgr_.getconn(fd);
 
@@ -90,7 +97,7 @@ void EventLoop::start() {
                         return;
                     }
                     conn->send(fd);
-                }
+                }      
             }
 
         });
@@ -129,4 +136,30 @@ void EventLoop::queueInLoop(std::function<void()> cb) {
     }
     uint64_t one = 1;
     ::write(wakeup_fd_, &one, sizeof(one));
+}
+
+TimerQueue::TimerId EventLoop::runAt(
+    std::chrono::steady_clock::time_point when,
+    TimerQueue::TimerCallback cb) {
+    
+    return timer_queue_.addTimer(std::move(cb), when,
+    std::chrono::milliseconds(0));
+}
+
+TimerQueue::TimerId EventLoop::runAfter(
+    std::chrono::milliseconds delay,
+    TimerQueue::TimerCallback cb) {
+
+    // delay 是时间段，要与时间点加和得到绝对时间用于执行
+    auto when = std::chrono::steady_clock::now() + delay;
+    return timer_queue_.addTimer(std::move(cb), when,
+    std::chrono::milliseconds(0));
+}
+
+TimerQueue::TimerId EventLoop::runEvery(
+    std::chrono::milliseconds interval,
+    TimerQueue::TimerCallback cb) {
+
+    auto when = std::chrono::steady_clock::now() + interval;
+    return timer_queue_.addTimer(std::move(cb), when, interval);
 }
