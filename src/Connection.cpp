@@ -1,22 +1,23 @@
 #include "Connection.h"
+
 #include "EventLoop.h"
 #include "logger.h"
 
-#include <cerrno>
-#include <iostream>
 #include <sys/socket.h>
 #include <unistd.h>
-#include <cstring>
 
-Connection::Connection(int client_fd) : client_fd_(client_fd),
-                                        last_active_time_(std::chrono::steady_clock::now()) {}
+#include <cerrno>
+#include <cstring>
+#include <iostream>
+
+Connection::Connection(int client_fd)
+    : client_fd_(client_fd), last_active_time_(std::chrono::steady_clock::now()) {}
 
 Connection::~Connection() {
     ::close(client_fd_);
 }
 
-void Connection::setCloseCallback(CloseCallback cb,
-                                  ConnectionManager *connmgr) {
+void Connection::setCloseCallback(CloseCallback cb, ConnectionManager *connmgr) {
     cb_ = cb;
     connmgr_ = connmgr;
 }
@@ -68,8 +69,7 @@ void Connection::recv(int client_fd) {
 
 void Connection::send(int client_fd) {
     while (!send_buffer_.empty()) {
-        ssize_t n =
-            ::send(client_fd, send_buffer_.c_str(), send_buffer_.length(), 0);
+        ssize_t n = ::send(client_fd, send_buffer_.c_str(), send_buffer_.length(), 0);
 
         if (n > 0) {
             send_buffer_.erase(0, n);
@@ -96,13 +96,12 @@ void Connection::send(int client_fd) {
     }
 }
 
-void Connection::setWriteCallbacks(std::function<void()> enable,
-                                   std::function<void()> disable) {
+void Connection::setWriteCallbacks(std::function<void()> enable, std::function<void()> disable) {
     enable_write_ = std::move(enable);
     disable_write_ = std::move(disable);
 }
 
-void Connection::touch(){
+void Connection::touch() {
     last_active_time_ = std::chrono::steady_clock::now();
 }
 

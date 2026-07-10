@@ -4,20 +4,20 @@
 #include "Connection.h"
 #include "Poller.h"
 
-#include <vector>
-#include <memory>
 #include <functional>
+#include <memory>
+#include <vector>
 
 class ConnectionManager {
-  public:
+public:
     explicit ConnectionManager(Poller *poller);
     Connection *getconn(int client_fd);
     void add(int client_fd);
     void remove(int client_fd);
-    void forEachConn(std::function<void(Connection*)> cb);
+    void forEachConn(std::function<void(Connection *)> cb);
 
-  private:
-    std::vector<std::unique_ptr<Connection>> connections_; // 一个fd对应一个连接
+private:
+    std::vector<std::unique_ptr<Connection>> connections_;  // 一个fd对应一个连接
     Poller *poller_;
 };
 

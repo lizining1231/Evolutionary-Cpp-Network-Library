@@ -10,7 +10,6 @@ Connection *ConnectionManager::getconn(int client_fd) {
 }
 
 void ConnectionManager::add(int client_fd) {
-    
     if (client_fd < 0) {
         return;
     }
@@ -24,9 +23,9 @@ void ConnectionManager::add(int client_fd) {
 }
 
 void ConnectionManager::remove(int client_fd) {
-    poller_->removeFd(client_fd);       // 先从 epoll 移除
+    poller_->removeFd(client_fd);  // 先从 epoll 移除
 
-    if (client_fd >= 0 && client_fd < (int)connections_.size()){
+    if (client_fd >= 0 && client_fd < (int)connections_.size()) {
         connections_[client_fd].reset();
     }
 }
@@ -38,10 +37,10 @@ void onConnectionClose(int fd, ConnectionManager *connmgr) {
     connmgr->remove(fd);
 }
 
-void ConnectionManager::forEachConn(std::function<void(Connection*)> cb){
+void ConnectionManager::forEachConn(std::function<void(Connection *)> cb) {
     for (auto &conn_ptr : connections_) {
         if (conn_ptr) {
-           cb(conn_ptr.get());
+            cb(conn_ptr.get());
         }
     }
 }

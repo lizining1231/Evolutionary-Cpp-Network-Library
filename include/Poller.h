@@ -2,10 +2,11 @@
 #define POLLER_H
 
 #include <sys/epoll.h>
+
 #include <functional>
 
 class Poller {
-  public:
+public:
     using EventCallback = std::function<void(int fd, uint32_t events)>;
 
     explicit Poller(int listen_fd);
@@ -20,7 +21,7 @@ class Poller {
 
     void iterateEvents(EventCallback cb);
 
-  private:
+private:
     int port_;
     int listen_fd_;
     int epoll_fd_;

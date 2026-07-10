@@ -2,26 +2,25 @@
 #include "decoder/DelimiterDecoder.h"
 #include "logger.h"
 
+#include <atomic>
+#include <chrono>
+#include <csignal>
 #include <cstdlib>
 #include <cstring>
 #include <iostream>
+#include <memory>
 #include <string>
 #include <thread>
 #include <vector>
-#include <atomic>
-#include <csignal>
-#include <memory>
-#include <chrono>
 
 std::atomic<bool> stopping{false};
 
-void signalHandle(int){
+void signalHandle(int) {
     stopping = true;
 }
 
-std::string
-handleMessage(char const *request,
-              size_t len) { // 之后可以改成const *std::string, 无需兼容数组
+std::string handleMessage(char const *request,
+                          size_t len) {  // 之后可以改成const *std::string, 无需兼容数组
 
     bool is_http_request = (std::strstr(request, "HTTP/") != NULL);
 
@@ -54,16 +53,15 @@ int main(int argc, char *argv[]) {
     LOG_INFO("Port: %d", port);
 
     try {
-
-        signal(SIGINT,signalHandle);
-        signal(SIGTERM,signalHandle);
+        signal(SIGINT, signalHandle);
+        signal(SIGTERM, signalHandle);
 
         unsigned int thread_count = 4;
         std::vector<std::thread> threads;
 
         LOG_INFO("Starting %u threads", thread_count);
 
-        std::vector<std::unique_ptr<EventLoop>>loops;
+        std::vector<std::unique_ptr<EventLoop>> loops;
 
         for (unsigned int i = 0; i < thread_count; i++) {
             auto loop = std::make_unique<EventLoop>(port);
@@ -75,7 +73,7 @@ int main(int argc, char *argv[]) {
         for (unsigned int i = 0; i < thread_count; i++) {
             threads.emplace_back([ptr = loops[i].get(), i]() {
                 LOG_INFO("[Thread %u] starting...", i);
-                ptr -> start();
+                ptr->start();
             });
         }
 
@@ -84,7 +82,7 @@ int main(int argc, char *argv[]) {
         }
 
         for (unsigned int i = 0; i < thread_count; i++) {
-            loops[i] -> stop();
+            loops[i]->stop();
         }
 
         for (auto &t : threads) {

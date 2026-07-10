@@ -1,6 +1,6 @@
 #include "Buffer.h"
 
-void Buffer::appendData(const char *data, ssize_t len) {
+void Buffer::appendData(const char* data, ssize_t len) {
     recv_buffer_.append(data, len);
 }
 

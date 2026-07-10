@@ -1,9 +1,8 @@
 #include "decoder/DelimiterDecoder.h"
 
-DelimiterDecoder::DelimiterDecoder(std::string delimiter)
-    : delimiter_(std::move(delimiter)){}
+DelimiterDecoder::DelimiterDecoder(std::string delimiter) : delimiter_(std::move(delimiter)) {}
 
-std::optional<std::string> DelimiterDecoder::decode(Buffer &buf) {
+std::optional<std::string> DelimiterDecoder::decode(Buffer& buf) {
     std::string request;
 
     const char* data = buf.peek();
@@ -12,13 +11,13 @@ std::optional<std::string> DelimiterDecoder::decode(Buffer &buf) {
 
     size_t pos = view.find(delimiter_);
     if (pos == std::string::npos) {
-        return std::nullopt; // 如果没找到字符串就返回false, 调用层进行处理
+        return std::nullopt;  // 如果没找到字符串就返回false, 调用层进行处理
 
     } else {
         size_t msg_len = pos + delimiter_.length();
         request = std::string(data, msg_len);
         buf.retrieve(msg_len);
-        
+
         return request;
     }
 }

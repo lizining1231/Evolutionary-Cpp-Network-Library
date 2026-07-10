@@ -4,13 +4,13 @@
 #include "decoder/FrameDecoder.h"
 
 class DelimiterDecoder : public FrameDecoder {
-  public:
+public:
     explicit DelimiterDecoder(std::string delimiter);
 
     std::optional<std::string> decode(Buffer &buf) override;
     std::unique_ptr<FrameDecoder> clone() const override;
 
-  private:
+private:
     std::string delimiter_;
 };
 

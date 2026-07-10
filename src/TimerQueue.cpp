@@ -1,16 +1,13 @@
 #include "TimerQueue.h"
+
 #include "EventLoop.h"
 #include "logger.h"
 
+#include <string.h>
 #include <sys/timerfd.h>
 #include <unistd.h>
-#include <string.h>
 
-
-TimerQueue::TimerQueue(EventLoop* loop)
-    : loop_(loop),
-      timerfd_(createTimerfd()),
-      seq_counter_(1) {}
+TimerQueue::TimerQueue(EventLoop* loop) : loop_(loop), timerfd_(createTimerfd()), seq_counter_(1) {}
 
 TimerQueue::~TimerQueue() {
     if (timerfd_ != -1) {
@@ -18,24 +15,23 @@ TimerQueue::~TimerQueue() {
     }
 }
 
-TimerQueue::TimerId TimerQueue::addTimer(
-    TimerCallback cb,
-    std::chrono::steady_clock::time_point when,
-    std::chrono::milliseconds interval) {
-        int seq = seq_counter_;
-        seq_counter_++;
+TimerQueue::TimerId TimerQueue::addTimer(TimerCallback cb,
+                                         std::chrono::steady_clock::time_point when,
+                                         std::chrono::milliseconds interval) {
+    int seq = seq_counter_;
+    seq_counter_++;
 
-        Timer timer{{seq}, when, std::move(cb), interval};
-        
-        bool earliest = heap_.empty() || timer.when < heap_.top().when;
-        heap_.push(std::move(timer));
-        
-        if (earliest) {
-            resetTimerfd(when);
-        }
+    Timer timer{{seq}, when, std::move(cb), interval};
 
-        return TimerId{seq};
+    bool earliest = heap_.empty() || timer.when < heap_.top().when;
+    heap_.push(std::move(timer));
+
+    if (earliest) {
+        resetTimerfd(when);
     }
+
+    return TimerId{seq};
+}
 
 void TimerQueue::cancel(TimerId timerId) {
     (void)timerId;
@@ -48,7 +44,7 @@ int TimerQueue::getTimerFd() const {
 void TimerQueue::handleRead() {
     uint64_t exp;
     ssize_t n = ::read(timerfd_, &exp, sizeof(exp));
-    if (n != sizeof(exp)){
+    if (n != sizeof(exp)) {
         LOG_ERROR("timerfd read error");
         return;
     }
@@ -65,8 +61,8 @@ void TimerQueue::handleRead() {
             heap_.push(std::move(timer));
         }
     }
-    
-    if(!heap_.empty()) {
+
+    if (!heap_.empty()) {
         resetTimerfd(heap_.top().when);
     }
 }

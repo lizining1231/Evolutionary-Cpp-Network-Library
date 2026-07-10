@@ -5,18 +5,19 @@
 #include "ConnectionManager.h"
 #include "Poller.h"
 #include "SocketListener.h"
-#include "decoder/FrameDecoder.h"
 #include "TimerQueue.h"
+#include "decoder/FrameDecoder.h"
 
-#include <string>
 #include <sys/eventfd.h>
-#include <thread>
+
 #include <functional>
-#include <vector>
 #include <mutex>
+#include <string>
+#include <thread>
+#include <vector>
 
 class EventLoop {
-  public:
+public:
     EventLoop(int port);
     ~EventLoop();
     void start();
@@ -30,12 +31,10 @@ class EventLoop {
 
     TimerQueue::TimerId runAt(std::chrono::steady_clock::time_point when,
                               TimerQueue::TimerCallback cb);
-    TimerQueue::TimerId runAfter(std::chrono::milliseconds delay,
-                              TimerQueue::TimerCallback cb);
-    TimerQueue::TimerId runEvery(std::chrono::milliseconds interval,
-                              TimerQueue::TimerCallback cb);
+    TimerQueue::TimerId runAfter(std::chrono::milliseconds delay, TimerQueue::TimerCallback cb);
+    TimerQueue::TimerId runEvery(std::chrono::milliseconds interval, TimerQueue::TimerCallback cb);
 
-  private:
+private:
     void startIdleTimeout();
     SocketListener listener_;
     Poller poller_;

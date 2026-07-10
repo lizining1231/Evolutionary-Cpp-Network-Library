@@ -1,24 +1,30 @@
 #include "SocketListener.h"
+
 #include "logger.h"
-
-#include <cstring>
-
-#include <cerrno>
-#include <iostream>
-#include <stdexcept>
 
 #include <arpa/inet.h>
 #include <fcntl.h>
 #include <sys/socket.h>
 #include <unistd.h>
 
+#include <cerrno>
+#include <cstring>
+#include <iostream>
+#include <stdexcept>
+
 #define BACKLOG 128
 
-SocketListener::SocketListener(int port) : listen_fd_(-1) { initSocket(port); }
+SocketListener::SocketListener(int port) : listen_fd_(-1) {
+    initSocket(port);
+}
 
-SocketListener::~SocketListener() { close(); }
+SocketListener::~SocketListener() {
+    close();
+}
 
-int SocketListener::getFd() const { return listen_fd_; }
+int SocketListener::getFd() const {
+    return listen_fd_;
+}
 
 void SocketListener::initSocket(int port) {
     // 设置套接字
@@ -33,12 +39,10 @@ void SocketListener::initSocket(int port) {
 
     // 设置套接字选项
     int opt = 1;
-    if (setsockopt(listen_fd_, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) <
-        0) {
+    if (setsockopt(listen_fd_, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) < 0) {
         throw std::runtime_error("Setsockopt SO_REUSEADDR failed");
     }
-    if (setsockopt(listen_fd_, SOL_SOCKET, SO_REUSEPORT, &opt, sizeof(opt)) <
-        0) {
+    if (setsockopt(listen_fd_, SOL_SOCKET, SO_REUSEPORT, &opt, sizeof(opt)) < 0) {
         throw std::runtime_error("Setsockopt SO_REUSEPORT failed");
     }
 
@@ -56,7 +60,7 @@ void SocketListener::initSocket(int port) {
     if (listen(listen_fd_, BACKLOG) < 0) {
         throw std::runtime_error("Listen failed");
     }
-    LOG_INFO("Server listening on port%d", port);
+    LOG_INFO("Server listening on port %d", port);
 }
 
 int SocketListener::accept() {
@@ -70,8 +74,7 @@ int SocketListener::accept() {
             return -1;
         }
 
-        throw std::runtime_error(std::string("Accept failed:") +
-                                 strerror(errno));
+        throw std::runtime_error(std::string("Accept failed:") + strerror(errno));
     }
 
     int old_flags = fcntl(client_fd, F_GETFL, 0);
@@ -89,7 +92,7 @@ int SocketListener::accept() {
 
 void SocketListener::close() {
     if (listen_fd_ >= 0) {
-        shutdown(listen_fd_, SHUT_WR); // 发送FIN
+        shutdown(listen_fd_, SHUT_WR);  // 发送FIN
         ::close(listen_fd_);
 
         listen_fd_ = -1;
