@@ -18,13 +18,13 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y cmake build-essential clang-format
+          sudo apt-get install -y cmake build-essential clang-format lcov
 
       - name: Check clang-format version
         run: clang-format --version
 
       - name: Configure CMake
-        run: cmake -B build -DCMAKE_BUILD_TYPE=Release
+        run: cmake -B build -DCMAKE_BUILD_TYPE=Debug -DCMAKE_CXX_FLAGS="--coverage" -DCMAKE_EXE_LINKER_FLAGS="--coverage"
 
       - name: Build
         run: cmake --build build --parallel $(nproc)
@@ -34,3 +34,24 @@ jobs:
           find . \( -name '*.h' -o -name '*.cpp' \) \
             -not -path './build/*' \
             -exec clang-format --dry-run --Werror {} +
+
+      - name: Run unit tests
+        run: ./build/test/TCPserver_test
+
+      - name: Generate coverage report
+        run: |
+          lcov --capture --directory build --output-file build/coverage.info \
+            --include '*/src/Buffer.cpp' \
+            --include '*/src/decoder/DelimiterDecoder.cpp' \
+            --include '*/src/ConnectionManager.cpp' \
+            --include '*/include/decoder/FrameDecoder.h'
+          genhtml build/coverage.info --output-directory build/coverage_report
+
+      - name: Check coverage threshold
+        run: |
+          COVERAGE=$(lcov --list build/coverage.info | grep "Total:" | awk '{print $2}' | sed 's/%//')
+          echo "Line coverage: $COVERAGE%"
+          if (( $(echo "$COVERAGE < 30" | bc -l) )); then
+            echo "Coverage below threshold (30%)"
+            exit 1
+          fi
