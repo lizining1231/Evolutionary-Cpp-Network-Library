@@ -1,3 +1,55 @@
+BasedOnStyle: Google
 IndentWidth: 4
 TabWidth: 4
 UseTab: Never
+
+# Google 风格默认 2 空格，这里改为 4
+AccessModifierOffset: -4
+
+# 控制关键字后加空格: if (...)
+SpaceBeforeParens: ControlStatements
+
+# 构造列表冒号前加空格
+BreakConstructorInitializers: BeforeColon
+ConstructorInitializerAllOnOneLineOrOnePerLine: true
+
+# 函数定义/声明大括号前加空格
+AllowShortFunctionsOnASingleLine: Inline
+
+# 指针靠左: int* p
+PointerAlignment: Left
+
+# 引用靠左: int& r
+ReferenceAlignment: Left
+
+# 运算符两侧加空格
+SpaceBeforeAssignmentOperators: true
+
+# 排序 include
+IncludeBlocks: Regroup
+IncludeCategories:
+  - Regex:           '".*"'
+    Priority:        1
+  - Regex:           '^<.*\.h>'
+    Priority:        2
+  - Regex:           '^<.*>'
+    Priority:        3
+
+# 最大列宽 100 (Google 默认)
+ColumnLimit: 100
+
+# 对齐连续声明
+AlignConsecutiveDeclarations: false
+
+# 不允许注释后的空行被删除
+ReflowComments: false
+
+# 开关大括号换行
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortLoopsOnASingleLine: false
+
+# case 缩进
+IndentCaseLabels: true
+
+# 命名空间不缩进
+FixNamespaceComments: true
