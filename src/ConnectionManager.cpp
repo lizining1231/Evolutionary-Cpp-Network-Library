@@ -30,13 +30,6 @@ void ConnectionManager::remove(int client_fd) {
     }
 }
 
-void onConnectionClose(int fd, ConnectionManager *connmgr) {
-    if (!connmgr) {
-        return;
-    }
-    connmgr->remove(fd);
-}
-
 void ConnectionManager::forEachConn(std::function<void(Connection *)> cb) {
     for (auto &conn_ptr : connections_) {
         if (conn_ptr) {

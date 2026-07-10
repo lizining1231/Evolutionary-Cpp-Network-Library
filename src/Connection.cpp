@@ -17,13 +17,12 @@ Connection::~Connection() {
     ::close(client_fd_);
 }
 
-void Connection::setCloseCallback(CloseCallback cb, ConnectionManager *connmgr) {
-    cb_ = cb;
-    connmgr_ = connmgr;
+void Connection::setCloseCallback(CloseCallback cb) {
+    cb_ = std::move(cb);
 }
 
 void Connection::setMessageCallback(MessageCallback cb) {
-    handler_ = cb;
+    handler_ = std::move(cb);
 }
 
 void Connection::setDecoder(std::unique_ptr<FrameDecoder> decoder) {
@@ -39,14 +38,14 @@ void Connection::recv(int client_fd) {
     if (bytes_read <= 0) {
         if (bytes_read == 0) {
             LOG_DEBUG("Client disconnected (fd:%d)", client_fd);
-            cb_(client_fd, connmgr_);
+            cb_(client_fd);
             return;
         } else {
             if (errno == EAGAIN || errno == EWOULDBLOCK) {
                 return;
             } else {
                 LOG_ERROR("Receive error (fd:%d): %s", client_fd, strerror(errno));
-                cb_(client_fd, connmgr_);
+                cb_(client_fd);
                 return;
             }
         }
@@ -84,7 +83,7 @@ void Connection::send(int client_fd) {
 
             } else {
                 LOG_ERROR("Send error (fd:%d): %s", client_fd, strerror(errno));
-                cb_(client_fd, connmgr_);
+                cb_(client_fd);
                 return;
             }
         }

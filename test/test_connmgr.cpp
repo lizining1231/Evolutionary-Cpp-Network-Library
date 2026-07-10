@@ -50,25 +50,6 @@ TEST(ConnectionManagerTest, ForEachConn) {
     close(sv[1]);
 }
 
-// onConnectionClose：验证回调函数，包括 nullptr 分支
-TEST(ConnectionManagerTest, OnConnectionClose) {
-    int sv[2];
-    socketpair(AF_UNIX, SOCK_STREAM, 0, sv);
-    Poller poller(sv[0]);
-    ConnectionManager cm(&poller);
-    cm.add(sv[1]);
-
-    // 测试 connmgr 为 nullptr 的分支
-    onConnectionClose(sv[1], nullptr);
-
-    // 测试正常分支
-    onConnectionClose(sv[1], &cm);
-    EXPECT_EQ(cm.getconn(sv[1]), nullptr);
-
-    close(sv[0]);
-    close(sv[1]);
-}
-
 // AddNegativeFd：验证 add 方法的负 fd 分支
 TEST(ConnectionManagerTest, AddNegativeFd) {
     int sv[2];

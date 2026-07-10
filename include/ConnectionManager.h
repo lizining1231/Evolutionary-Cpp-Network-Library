@@ -21,6 +21,4 @@ private:
     Poller *poller_;
 };
 
-void onConnectionClose(int fd, ConnectionManager *connmgr);
-
 #endif

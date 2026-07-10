@@ -35,7 +35,7 @@ EventLoop::~EventLoop() {
 }
 
 void EventLoop::setMessageCallback(MessageCallback cb) {
-    user_handler_ = cb;
+    user_handler_ = std::move(cb);
 }
 
 void EventLoop::setDecoder(std::unique_ptr<FrameDecoder> decoder) {
@@ -63,7 +63,7 @@ void EventLoop::start() {
                 }
 
                 conn->setMessageCallback(user_handler_);
-                conn->setCloseCallback(onConnectionClose, &connmgr_);
+                conn->setCloseCallback([this](int fd) { connmgr_.remove(fd); });
                 conn->setDecoder(decoder_->clone());
                 conn->setWriteCallbacks([this, new_fd]() { poller_.enableOut(new_fd); },
                                         [this, new_fd]() { poller_.disableOut(new_fd); });
@@ -144,7 +144,7 @@ void EventLoop::startIdleTimeout() {
         connmgr_.forEachConn([&](Connection *conn) {
             if (now - conn->getLastActiveTime() > timeout) {
                 LOG_INFO("[IdleTimeout] fd:%d idle timeout, close", conn->getFd());
-                onConnectionClose(conn->getFd(), &connmgr_);
+                connmgr_.remove(conn->getFd());
             }
         });
     });

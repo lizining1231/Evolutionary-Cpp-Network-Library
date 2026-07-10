@@ -10,8 +10,8 @@
 
 class ConnectionManager;
 
-using MessageCallback = std::string (*)(char const *msg, size_t len);
-using CloseCallback = void (*)(int fd, ConnectionManager *connmgr);
+using MessageCallback = std::function<std::string(const char *msg, size_t len)>;
+using CloseCallback = std::function<void(int fd)>;
 
 class Connection {
 public:
@@ -23,7 +23,7 @@ public:
     void recv(int client_fd);
 
     void setMessageCallback(MessageCallback cb);
-    void setCloseCallback(CloseCallback cb, ConnectionManager *connmgr);
+    void setCloseCallback(CloseCallback cb);
     void setDecoder(std::unique_ptr<FrameDecoder> decoder);
 
     void setWriteCallbacks(std::function<void()> enable, std::function<void()> disable);
@@ -38,7 +38,6 @@ private:
     std::string send_buffer_;
 
     Buffer recv_buffer_;
-    ConnectionManager *connmgr_;
     CloseCallback cb_;
     MessageCallback handler_;
 
