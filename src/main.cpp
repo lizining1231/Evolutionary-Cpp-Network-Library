@@ -1,6 +1,7 @@
 #include "EventLoop.h"
 #include "decoder/DelimiterDecoder.h"
 #include "logger.h"
+#include "Config.h"
 
 #include <atomic>
 #include <chrono>
@@ -39,18 +40,11 @@ std::string handleMessage(char const *request,
 }
 
 int main(int argc, char *argv[]) {
-    int port = 8080;
+    Config cfg;
+    cfg.parseCommandLine(argc, argv);
 
-    if (argc >= 2) {
-        port = std::atoi(argv[1]);
-
-        if (port <= 0 || port > 65535) {
-            LOG_ERROR("Port must be between 1 and 65535");
-            return 1;
-        }
-    }
-
-    LOG_INFO("Port: %d", port);
+    LOG_INFO("Port: %d", cfg.port);
+    LOG_INFO("Threads: %d", cfg.thread_count);
 
     try {
         signal(SIGINT, signalHandle);
@@ -64,7 +58,7 @@ int main(int argc, char *argv[]) {
         std::vector<std::unique_ptr<EventLoop>> loops;
 
         for (unsigned int i = 0; i < thread_count; i++) {
-            auto loop = std::make_unique<EventLoop>(port);
+            auto loop = std::make_unique<EventLoop>(cfg);
             loop->setMessageCallback(handleMessage);
             loop->setDecoder(std::make_unique<DelimiterDecoder>("\r\n\r\n"));
             loops.push_back(std::move(loop));

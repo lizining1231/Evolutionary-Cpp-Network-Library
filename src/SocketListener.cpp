@@ -1,5 +1,5 @@
 #include "SocketListener.h"
-
+#include "Config.h"
 #include "logger.h"
 
 #include <arpa/inet.h>
@@ -12,10 +12,9 @@
 #include <iostream>
 #include <stdexcept>
 
-#define BACKLOG 128
 
-SocketListener::SocketListener(int port) : listen_fd_(-1) {
-    initSocket(port);
+SocketListener::SocketListener(Config& cfg) : listen_fd_(-1) {
+    initSocket(cfg.port, cfg.backlog);
 }
 
 SocketListener::~SocketListener() {
@@ -26,7 +25,7 @@ int SocketListener::getFd() const {
     return listen_fd_;
 }
 
-void SocketListener::initSocket(int port) {
+void SocketListener::initSocket(int port, int backlog) {
     // 设置套接字
     listen_fd_ = socket(AF_INET, SOCK_STREAM, 0);
 
@@ -57,7 +56,7 @@ void SocketListener::initSocket(int port) {
     }
 
     // 监听
-    if (listen(listen_fd_, BACKLOG) < 0) {
+    if (listen(listen_fd_, backlog) < 0) {
         throw std::runtime_error("Listen failed");
     }
     LOG_INFO("Server listening on port %d", port);

@@ -14,8 +14,6 @@ enum LogLevel {
     LOG_LEVEL_DEBUG = 4,
 };
 
-// 默认级别：NDEBUG（Release）→ NONE（0），非 Release（Debug）→ INFO（3）
-// ⚠️ 用数字字面量，预处理器不识别 enum 值
 #ifndef LOG_LEVEL
 #ifdef NDEBUG
 #define LOG_LEVEL 0  // NONE

@@ -3,6 +3,7 @@
 #include "ConnectionManager.h"
 #include "TimerQueue.h"
 #include "logger.h"
+#include "Config.h"
 
 #include <sys/epoll.h>
 #include <sys/eventfd.h>
@@ -14,8 +15,12 @@
 #include <string>
 
 // EventLoop类的实现
-EventLoop::EventLoop(int port)
-    : listener_(port), poller_(listener_.getFd()), connmgr_(&poller_), timer_queue_(this) {
+EventLoop::EventLoop(Config& cfg)
+    : cfg_(cfg), listener_(cfg),
+      poller_(listener_.getFd(), cfg),
+      connmgr_(&poller_, cfg),
+      timer_queue_(this) {
+
     signal(SIGPIPE, SIG_IGN);  // 防止Fin包未收到时send数据导致进程被砍
 
     wakeup_fd_ = eventfd(0, EFD_NONBLOCK);
@@ -25,7 +30,7 @@ EventLoop::EventLoop(int port)
     poller_.addFd(wakeup_fd_);
     poller_.addFd(timer_queue_.getTimerFd());
 
-    LOG_INFO("TCP server initialized on port %d", port);
+    LOG_INFO("TCP server initialized on port %d", cfg.port);
 }
 
 EventLoop::~EventLoop() {

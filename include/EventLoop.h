@@ -16,9 +16,11 @@
 #include <thread>
 #include <vector>
 
+#include "Config.h"
+
 class EventLoop {
 public:
-    EventLoop(int port);
+    EventLoop(Config& cfg);
     ~EventLoop();
     void start();
     void stop();
@@ -36,6 +38,7 @@ public:
 
 private:
     void startIdleTimeout();
+    Config& cfg_;
     SocketListener listener_;
     Poller poller_;
     ConnectionManager connmgr_;

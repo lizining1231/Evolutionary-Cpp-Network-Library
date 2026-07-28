@@ -1,4 +1,5 @@
 #include "Poller.h"
+#include "Config.h"
 
 #include <sys/epoll.h>
 #include <unistd.h>
@@ -8,7 +9,11 @@
 #include <stdexcept>
 
 // SocketListener类没有无参构造函数，这里添加显示构造
-Poller::Poller(int listen_fd) : listen_fd_(listen_fd) {
+Poller::Poller(int listen_fd, Config& cfg)
+    : listen_fd_(listen_fd),
+    max_events_(cfg.max_events),
+    epoll_timeout_ms_(cfg.epoll_timeout_ms),
+    events_(cfg.max_events) {
     epoll_fd_ = epoll_create1(0);
 
     struct epoll_event ev;
@@ -25,7 +30,7 @@ void Poller::addFd(int client_fd) {
 }
 
 void Poller::wait() {
-    ready_count_ = epoll_wait(epoll_fd_, events_, MAX_EVENTS, 100);
+    ready_count_ = epoll_wait(epoll_fd_, events_.data(), max_events_, epoll_timeout_ms_);
 
     if (ready_count_ < 0 && errno != EINTR) {
         throw std::runtime_error(std::string("epoll_wait:") + strerror(errno));

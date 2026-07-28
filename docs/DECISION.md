@@ -137,7 +137,7 @@
 
 ## 6月8日：关于资源释放职责梳理与优雅退出方案选型
 
-### 场景 
+### 场景
 
 发现 ConnectionManager::remove 中的删除顺序与职责划分不符合行业实践：
 
@@ -155,7 +155,7 @@ ConnectionManager::remove(fd)
 
 同时，当前 `Ctrl+C` 会直接 kill 进程，没有任何清理流程。
 
-### 分析 
+### 分析
 
 **问题一：Poller 职责不清**
 
@@ -171,7 +171,7 @@ Connection 持有 `client_fd_`，但析构时不自动 close。若某个路径�
 
 **核心阻塞链：** 无优雅退出 → 无法安全终止 EventLoop → 无法安全释放资源。
 
-### 方案 
+### 方案
 
 **决策 1：Connection 资源管理**
 
@@ -213,7 +213,7 @@ Connection 持有 `client_fd_`，但析构时不自动 close。若某个路径�
 | ❌ 信号处理函数直接调 stop   | 信号处理函数中可做操作有限，不安全                            |
 | ✅ **原子标志 + 主线程轮询** | 信号只设 `atomic<bool>`，主线程 sleep 轮询，发现后遍历调 stop |
 
-### 综合改动 
+### 综合改动
 
 | 文件                      | 改动                                                 | 原因          |
 | ----------------------- | -------------------------------------------------- | ----------- |
@@ -251,7 +251,7 @@ Connection 持有 `client_fd_`，但析构时不自动 close。若某个路径�
 
 ## 7月1日：#8 Connection 解除对 Poller 的耦合 — 回调注入方案
 
-### 场景 
+### 场景
 
 当前 `Connection` 以 **public 成员** 持有 `Poller*` 指针：
 
@@ -275,7 +275,7 @@ poller_->enableOut(client_fd);   // 注册 EPOLLOUT
 poller_->disableOut(client_fd);  // 注销 EPOLLOUT
 ```
 
-### 问题 
+### 问题
 
 | 问题 | 说明 |
 |:----|:------|
@@ -314,7 +314,7 @@ EventLoop 每次循环遍历所有 Connection 检查 `send_buffer_` 是否为空
 
 - 评价：架构最纯粹，但引入 100ms 延迟 + O(n) 遍历开销 ❌
 
-### 决策依据 
+### 决策依据
 
 | 对比维度 | 方案0 仅封装 | 方案1 回调注入 | 方案2 Event 抽象 | 方案3 纯拉模式 |
 |:---------|:----------:|:------------:|:--------------:|:------------:|
@@ -338,7 +338,7 @@ EventLoop 每次循环遍历所有 Connection 检查 `send_buffer_` 是否为空
 | `src/EventLoop.cpp` | accept 新连接时注入 lambda：`conn->setWriteCallbacks([this,fd](){...})` |
 | `src/ConnectionManager.cpp` | 移除 `Poller*` 参数传递，简化构造函数 |
 
-### 设计要点 
+### 设计要点
 
 ```
 改前：
@@ -353,7 +353,7 @@ EventLoop 每次循环遍历所有 Connection 检查 `send_buffer_` 是否为空
     后续换 ET / io_uring，改 EventLoop 即可     ✅
 ```
 
-### 后续拓展 
+### 后续拓展
 
 方案 1 可平滑升级为方案 2：后续引入定时器（#11）或对象池（#21）时，可将 `std::function` 统一包裹为 `Event` 结构体，实现复用。
 
@@ -511,3 +511,283 @@ N >= 232,558 logs/s/线程
 | 日志 CPU 开销 | ~20% | 0% | ~0.005% |
 | QPS 影响 | 有（20% CPU 被日志吃掉） | 零 | 可忽略 |
 | 代码行数 | 15 处散落 | 0（空宏） | 替换为统一 API |
+
+---
+
+## 7月12日：#16 微型配置系统 — ConfigItem<T> 模板注册 + JSON 配置文件 + CLI 覆盖 + 变更回调
+
+### 场景
+
+当前项目中 6 个关键参数散落在 5 个文件中，全部硬编码：
+
+| 参数 | 当前值 | 位置 | 说明 |
+|:---|:---:|:---|:---|
+| BACKLOG | 128 | SocketListener.cpp:15 | listen 队列长度 |
+| thread_count | 4 | main.cpp:59 | 工作线程数 |
+| port | 8080 | main.cpp:42 | 监听端口（已有 CLI 覆盖） |
+| MAX_EVENTS | 4096 | Poller.h:29 | epoll_wait 最大事件数 |
+| epoll_wait 超时 | 100ms | Poller.cpp:28 | 事件等待超时 |
+| recv 缓冲区 | 65536 (64KB) | Connection.cpp:33 | 单次 recv 栈缓冲区 |
+
+**三个痛点：**
+
+1. **改配置必须改代码** — 调整任何参数都需要改源码重编译，无法在运行时调整
+2. **参数分散难以管理** — 找一个参数要在多个文件中搜索，修改时容易遗漏
+3. **扩展性极差** — 每加一个配置项，需要在 3 个不同的地方手写 if-else 代码
+
+### 分析
+
+**设计目标：**
+
+| 视角 | 需求 |
+|:---|:---|
+| **开发者体验** | 加一个新配置项→**只改一处声明**，不用操心 JSON 解析、CLI 解析的重复代码 |
+| **用户体验** | 默认值直接能跑，想调整改 config.json，临时调试用 CLI 覆盖 |
+| **架构整洁** | 配置集中管理，与业务代码解耦 |
+| **面试含金量** | 展示 C++ 模板、运算符重载、RAII 等核心特性的实际运用 |
+
+### 方案调研 🔍
+
+经过调研业界主流项目的配置系统：
+
+| 项目 | 做法 | 可扩展性 | 评价 |
+|:---|:---|:---:|:---|
+| **muduo**（陈硕） | 几乎没配置系统，硬编码 + 简单 struct | ❌ 差 | 定位是"给别人用的库"，追求极简 |
+| **Redis** | **配置项结构体 + 名称 + 校验回调 + 变更回调，注册到全局列表** | ✅ 好 | **和我们的方案完全一致！** |
+| **Nginx** | 三层配置（main→http→server→location），继承覆盖 | ✅ 好 | 层级过多，不适合小项目 |
+| **libevent** | 简单 struct + 环境变量 | ⚠️ 一般 | 够用就行 |
+
+**关键发现：Redis 的配置系统和我们的 `ConfigItem<T>` 方案设计思想完全一致：**
+
+```c
+// Redis config.c —— 每个配置项是一个自包含的注册条目
+standardConfig configs[] = {
+    {"port", NUMERIC, {.numeric = {&server.port, 6379, is_valid, update}}},
+    {"timeout", NUMERIC, {.numeric = {&server.timeout, 0, is_valid, update}}},
+    // 加一个配置 = 加一行
+};
+```
+
+Redis 用 C 语言，手动写类型枚举（NUMERIC/STRING/BOOL）。我们的 C++ 方案用模板 `ConfigItem<int>`，**编译器自动推导类型，比 Redis 更简洁**。
+
+### 本方案的三种写法对比
+
+在确定最终方案之前，我们调研了三种可能的实现路线：
+
+**路线 1：朴素 if-else（最直接）**
+
+```cpp
+// Config.h
+struct Config {
+    int port = 8080;
+    int backlog = 128;
+};
+
+// Config.cpp
+void Config::loadFromFile(...) {
+    if (j.contains("port")) port = j["port"];        // 每加一个写一行
+    if (j.contains("backlog")) backlog = j["backlog"]; // 每加一个写一行
+}
+void Config::parseCommandLine(...) {
+    if (arg == "--port") port = std::stoi(argv[++i]);     // 每加一个写一行
+    if (arg == "--backlog") backlog = std::stoi(argv[++i]); // 每加一个写一行
+}
+```
+
+评价：最简单，但每加一个配置项要改 **3 处代码**。50 个配置就是 150 行重复代码。
+
+**路线 2：X Macro（定义即注册）**
+
+```cpp
+#define CONFIG_FIELDS \
+    X(port, 8080) \
+    X(backlog, 128)
+
+// 展开成 struct 字段
+struct Config {
+    #define X(name, val) int name = val;
+    CONFIG_FIELDS
+    #undef X
+};
+
+// 展开成 JSON 解析
+void Config::loadFromFile(...) {
+    #define X(name, val) if (j.contains(#name)) name = j[#name];
+    CONFIG_FIELDS  // 自动展开
+    #undef X
+};
+```
+
+评价：确实是"加一行就够"，但宏展开的结果难以调试，编辑器提示不友好。**为了省 12 行代码引入宏，不划算。**
+
+**路线 3：ConfigItem<T> + 运算符重载 🔥（最终选择）**
+
+```cpp
+template<typename T>
+struct ConfigItem {
+    const char* name;       // 配置项名称（用于 JSON/CLI 解析）
+    T value;                // 当前值
+    std::function<void(const T&)> callback;  // 变更回调
+
+    // operator T()：隐式转换为 T
+    // 让 ConfigItem<T> 在外面可以直接当 T 用
+    operator T() const { return value; }
+
+    // operator=：赋值时自动触发回调
+    ConfigItem& operator=(const T& new_val) {
+        if (new_val != value) {
+            value = new_val;
+            if (callback) callback(value);  // 自动通知！
+        }
+        return *this;
+    }
+};
+```
+
+评价：使用者看到的是 `int`，加配置只改一处声明，变更自动触发回调。
+
+### 为什么选路线 3
+
+| 对比维度 | 路线 1 朴素 if-else | 路线 2 X Macro | 路线 3 ConfigItem<T> ✅ |
+|:---------|:-----------------:|:-------------:|:--------------------:|
+| 加配置改几处 | 3 处 | **1 处** | **1 处** |
+| 使用方写法 | `cfg.port` ✅ | `cfg.port` ✅ | `cfg.port` ✅（隐式转换） |
+| 代码可读性 | ✅ 一目了然 | ❌ 宏展开难追踪 | ✅ 模板声明清晰 |
+| 变更回调 | ❌ 无 | ❌ 无 | ✅ 自动通知 |
+| 类型安全 | ⚠️ 靠自觉 | ⚠️ 靠自觉 | ✅ 模板强制 |
+| 面试含金量 | ⭐ 太简单 | ⭐⭐ 宏技巧 | ⭐⭐⭐ C++ 模板实战 |
+
+**最终选择路线 3 的核心原因：**
+
+1. **加配置只改一处声明** — `ConfigItem<int> port{"port", 8080}`，JSON 解析和 CLI 解析自动匹配
+2. **使用方无感** — `operator T()` 隐式转换，外面看起来就是 `int`
+3. **变更回调** — 配置变了自动通知相关模块，不用重启
+4. **业界印证** — Redis 的配置系统设计思想完全一致
+
+### 语法讲解：方案涉及的核心 C++ 特性
+
+**① `template<typename T>` — 模板**
+
+```cpp
+template<typename T>
+struct ConfigItem {
+    // T 是一个"占位符类型"
+    // 使用者写 ConfigItem<int> → T = int
+    // 使用者写 ConfigItem<double> → T = double
+    T value;
+    T default_val;
+};
+```
+
+**② `operator T()` — 隐式转换**
+
+```cpp
+struct ConfigItem {
+    int value;
+    // "当别人把 ConfigItem 当 int 用时，自动返回 value"
+    operator int() const { return value; }
+};
+
+ConfigItem<int> port;
+int p = port;  // ✅ 自动调用 operator int()，相当于 p = port.value
+```
+
+标准库中的例子：`std::optional<int> opt = 42; if (opt)` — `opt` 隐式转 `bool`，判断是否有值。
+
+**③ `operator=` — 赋值运算符重载**
+
+```cpp
+struct ConfigItem {
+    int value;
+    std::function<void(int)> callback;
+
+    ConfigItem& operator=(int new_val) {
+        if (new_val != value) {
+            value = new_val;
+            if (callback) callback(value);  // 赋值完成，通知监听者！
+        }
+        return *this;
+    }
+};
+```
+
+**④ 变参宏 `__VA_ARGS__` （辅助功能，可选）**
+
+用于自动生成 help 信息，不是核心。
+
+### 最终决策
+
+**采用 ConfigItem<T> 模板注册方案，具体设计如下：**
+
+```
+三层配置优先级（后者覆盖前者）：
+    1. ConfigItem 构造时指定的默认值
+    2. config.json 文件中的值
+    3. CLI 参数（--port --threads 等）
+
+变更回调机制：
+    配置项被赋值 → 自动触发 callback → 相关模块自我调整
+    例：max_events 变了 → poller 自动 resize ← 不用重启！
+
+加一个新配置项的步骤：
+    1. 在 Config 结构体里加一行声明
+    → JSON 解析、CLI 解析自动匹配，不用改代码
+```
+
+核心数据结构：
+
+```cpp
+// include/Config.h
+template<typename T>
+struct ConfigItem {
+    const char* name;
+    T value;
+    T default_val;
+    std::function<void(const T&)> callback;
+
+    operator T() const { return value; }
+    ConfigItem& operator=(const T& v) { /* 赋值 + 回调 */ }
+};
+
+struct Config {
+    ConfigItem<int> port{"port", 8080};
+    ConfigItem<int> backlog{"backlog", 128};
+    ConfigItem<int> thread_count{"thread_count", 4};
+    ConfigItem<int> max_events{"max_events", 4096};
+    ConfigItem<int> epoll_timeout_ms{"epoll_timeout_ms", 100};
+    ConfigItem<int> recv_buffer_size{"recv_buffer_size", 65536};
+
+    void loadFromFile(const std::string& path);
+    void parseCommandLine(int argc, char** argv);
+};
+```
+
+配置优先级实现：
+
+```cpp
+int main() {
+    Config cfg;                          // Step 1: 默认值
+    cfg.loadFromFile("./config.json");   // Step 2: JSON 覆盖
+    cfg.parseCommandLine(argc, argv);    // Step 3: CLI 覆盖
+}
+```
+
+配置变更回调使用示例：
+
+```cpp
+// 在 EventLoop 构造时绑定回调
+cfg.max_events.setCallback([this](int val) {
+    poller_.resize(val);    // 配置变了，自动调整 poller！
+});
+```
+
+### 预期效果
+
+| 指标 | 改前 | 改后 |
+|:---|:---|:---|
+| 参数查找时间 | 在多个文件中搜索 | 集中在 Config.h |
+| 加配置改动量 | 改 3 处代码 | 加 1 行声明 |
+| 用户改配置 | 改代码重编译 | 改 config.json 或 CLI |
+| 运行时更改 | ❌ 必须重启 | ✅ 变更回调自动通知 |
+| 类型安全 | ⚠️ 靠自觉 | ✅ 模板强制 |
+| 依赖引入 | 纯 C++ 标准库 | 单头文件 nlohmann/json |

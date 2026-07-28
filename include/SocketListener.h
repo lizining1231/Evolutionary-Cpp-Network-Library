@@ -1,9 +1,11 @@
 #ifndef SOCKETLISTENER_H
 #define SOCKETLISTENER_H
 
+#include "Config.h"
+
 class SocketListener {
 public:
-    explicit SocketListener(int port);
+    explicit SocketListener(Config& cfg);
     ~SocketListener();
     int getFd() const;
     int accept();
@@ -11,7 +13,7 @@ public:
 
 private:
     int listen_fd_;
-    void initSocket(int port);
+    void initSocket(int port, int backlog);
 
     SocketListener(const SocketListener &) = delete;  // 禁止拷贝
     SocketListener &operator=(const SocketListener &) = delete;

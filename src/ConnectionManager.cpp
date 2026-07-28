@@ -1,6 +1,9 @@
 #include "ConnectionManager.h"
+#include "Config.h"
 
-ConnectionManager::ConnectionManager(Poller *poller) : poller_(poller) {}
+ConnectionManager::ConnectionManager(Poller *poller, Config& cfg) :
+    poller_(poller),
+    recv_buffer_size_(cfg.recv_buffer_size) {}
 
 Connection *ConnectionManager::getconn(int client_fd) {
     if (client_fd < 0 || client_fd >= (int)connections_.size()) {
@@ -17,7 +20,7 @@ void ConnectionManager::add(int client_fd) {
     if (client_fd >= (int)connections_.size()) {
         connections_.resize(client_fd + 1);
     }
-    connections_[client_fd] = std::make_unique<Connection>(client_fd);
+    connections_[client_fd] = std::make_unique<Connection>(client_fd, recv_buffer_size_);
 
     poller_->addFd(client_fd);
 }

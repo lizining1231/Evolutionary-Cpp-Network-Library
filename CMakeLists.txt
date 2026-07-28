@@ -23,6 +23,7 @@ add_library(im_gateway STATIC
     src/EventLoop.cpp
     src/decoder/DelimiterDecoder.cpp
     src/TimerQueue.cpp
+    src/Config.cpp
 )
 
 target_include_directories(im_gateway PRIVATE

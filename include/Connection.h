@@ -15,7 +15,7 @@ using CloseCallback = std::function<void(int fd)>;
 
 class Connection {
 public:
-    Connection(int client_fd);
+    Connection(int client_fd, int recv_buffer_size);
     ~Connection();
     Connection() = delete;
 
@@ -34,6 +34,7 @@ public:
 
 private:
     int client_fd_;
+    int recv_buffer_size_;
     std::unique_ptr<FrameDecoder> decoder_;
     std::string send_buffer_;
 

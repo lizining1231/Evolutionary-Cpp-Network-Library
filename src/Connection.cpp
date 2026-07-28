@@ -10,8 +10,10 @@
 #include <cstring>
 #include <iostream>
 
-Connection::Connection(int client_fd)
-    : client_fd_(client_fd), last_active_time_(std::chrono::steady_clock::now()) {}
+Connection::Connection(int client_fd, int recv_buffer_size)
+    : client_fd_(client_fd),
+      recv_buffer_size_(recv_buffer_size),
+      last_active_time_(std::chrono::steady_clock::now()) {}
 
 Connection::~Connection() {
     ::close(client_fd_);
@@ -30,10 +32,10 @@ void Connection::setDecoder(std::unique_ptr<FrameDecoder> decoder) {
 }
 
 void Connection::recv(int client_fd) {
-    char temp_buffer[65536];
+    std::vector<char> temp_buffer(recv_buffer_size_);
     ssize_t bytes_read;
 
-    bytes_read = ::recv(client_fd, temp_buffer, sizeof(temp_buffer), 0);
+    bytes_read = ::recv(client_fd, temp_buffer.data(), temp_buffer.size(), 0);
 
     if (bytes_read <= 0) {
         if (bytes_read == 0) {
@@ -53,7 +55,7 @@ void Connection::recv(int client_fd) {
 
     touch();
 
-    recv_buffer_.appendData(temp_buffer, bytes_read);
+    recv_buffer_.appendData(temp_buffer.data(), bytes_read);
 
     // 解析 recv_buffer_，调 handler 生成响应，放入 send_buffer_
     while (auto request = decoder_->decode(recv_buffer_)) {
