@@ -1,0 +1,8 @@
+{
+    "port": 8080,
+    "threads": 4,
+    "backlog": 128,
+    "max_events": 4096,
+    "epoll_timeout": 100,
+    "recv_buffer": 65536
+}

@@ -41,7 +41,7 @@ std::string handleMessage(char const *request,
 
 int main(int argc, char *argv[]) {
     Config cfg;
-    cfg.parseCommandLine(argc, argv);
+    cfg.init(argc, argv);              // 默认值 → config.json → CLI
 
     LOG_INFO("Port: %d", cfg.port);
     LOG_INFO("Threads: %d", cfg.thread_count);

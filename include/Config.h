@@ -11,6 +11,9 @@ struct Config {
     int epoll_timeout_ms = 100;
     int recv_buffer_size = 65536;
 
+    std::string config_path = "config.json";
+
+    void init(int argc, char** argv);
     void loadFromFile(const std::string& path);
     void parseCommandLine(int argc, char** argv);
 };
