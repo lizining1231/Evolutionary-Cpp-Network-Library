@@ -34,6 +34,24 @@ void Config::parseCommandLine(int argc, char** argv) {
             continue;
         }
 
+        if (arg == "--max-events" && i + 1 < argc) {
+            max_events = std::stoi(argv[i + 1]);
+            i += 1;
+            continue;
+        }
+
+        if (arg == "--epoll-timeout" && i + 1 < argc) {
+            epoll_timeout_ms = std::stoi(argv[i + 1]);
+            i += 1;
+            continue;
+        }
+
+        if (arg == "--recv-buffer" && i + 1 < argc) {
+            recv_buffer_size = std::stoi(argv[i + 1]);
+            i += 1;
+            continue;
+        }
+
         if (arg == "--help") {
             // 后续添加
         }
