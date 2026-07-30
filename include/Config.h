@@ -17,10 +17,12 @@ struct Config {
     #undef X
 
     std::string config_path = "config.json";
+    bool dump_config_ = false;
 
     void init(int argc, char** argv);
     void loadFromFile(const std::string& path);
     void parseCommandLine(int argc, char** argv);
+    void dump() const;
 };
 
 #endif

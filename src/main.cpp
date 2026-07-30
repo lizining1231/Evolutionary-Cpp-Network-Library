@@ -43,6 +43,11 @@ int main(int argc, char *argv[]) {
     Config cfg;
     cfg.init(argc, argv);              // 默认值 → config.json → CLI
 
+    if (cfg.dump_config_) {
+        cfg.dump();
+        return 0;
+    }
+
     LOG_INFO("Port: %d", cfg.port);
     LOG_INFO("Threads: %d", cfg.thread_count);
 

@@ -42,6 +42,10 @@ void Config::parseCommandLine(int argc, char** argv) {
             config_path = argv[++i];
             continue;
         }
+        if (arg == "--dump-config") {
+            dump_config_ = true;
+            continue;
+        }
         if (arg == "--help") {
             // 后续添加
         }
@@ -55,4 +59,11 @@ void Config::parseCommandLine(int argc, char** argv) {
         CONFIG_ITEMS(X)
         #undef X
     }
+}
+
+void Config::dump() const {
+    #define X(field, json_key, cli_flag, default_val) \
+        printf("%-20s %d\n", json_key, field);
+    CONFIG_ITEMS(X)
+    #undef X
 }
