@@ -27,63 +27,32 @@ void Config::loadFromFile(const std::string& path) {
 
     json j = json::parse(file);
 
-    if (j.contains("port"))          port             = j["port"];
-    if (j.contains("threads"))       thread_count     = j["threads"];
-    if (j.contains("backlog"))       backlog          = j["backlog"];
-    if (j.contains("max_events"))    max_events       = j["max_events"];
-    if (j.contains("epoll_timeout")) epoll_timeout_ms = j["epoll_timeout"];
-    if (j.contains("recv_buffer"))   recv_buffer_size = j["recv_buffer"];
+    #define X(field, json_key, cli_flag, default_val) \
+        if (j.contains(json_key)) field = j[json_key];
+    CONFIG_ITEMS(X)
+    #undef X
+
 }
 
 void Config::parseCommandLine(int argc, char** argv) {
-    for (int i = 1; i <argc; i++) {
+    for (int i = 1; i < argc; i++) {
         std::string arg = argv[i];
 
-        if (arg == "--port" && i + 1 < argc) {
-            port = std::stoi(argv[i + 1]);
-            i += 1;
-            continue;
-        }
-
-        if (arg == "--threads" && i + 1 < argc) {
-            thread_count = std::stoi(argv[i + 1]);
-            i += 1;
-            continue;
-        }
-
-        if (arg == "--backlog" && i + 1 < argc) {
-            backlog = std::stoi(argv[i + 1]);
-            i += 1;
-            continue;
-        }
-
-        if (arg == "--max-events" && i + 1 < argc) {
-            max_events = std::stoi(argv[i + 1]);
-            i += 1;
-            continue;
-        }
-
-        if (arg == "--epoll-timeout" && i + 1 < argc) {
-            epoll_timeout_ms = std::stoi(argv[i + 1]);
-            i += 1;
-            continue;
-        }
-
-        if (arg == "--recv-buffer" && i + 1 < argc) {
-            recv_buffer_size = std::stoi(argv[i + 1]);
-            i += 1;
-            continue;
-        }
-
         if (arg == "--config" && i + 1 < argc) {
-            config_path = argv[i + 1];
-            i += 1;
+            config_path = argv[++i];
             continue;
         }
-
         if (arg == "--help") {
             // 后续添加
         }
 
+        // int 类型的参数配置由 X-macro 生成
+        #define X(field, json_key, cli_flag, default_val) \
+            if (arg == cli_flag && i + 1 < argc) {        \
+                field = std::stoi(argv[++i]);             \
+                continue;                                 \
+            }
+        CONFIG_ITEMS(X)
+        #undef X
     }
 }
