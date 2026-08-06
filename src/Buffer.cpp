@@ -1,18 +1,17 @@
 #include "Buffer.h"
 
-void Buffer::appendData(const char *data, ssize_t len) {
+void Buffer::appendData(const char* data, ssize_t len) {
     recv_buffer_.append(data, len);
 }
 
-bool Buffer::takeData(std::string &request, const std::string &delimeter) {
-    size_t pos = recv_buffer_.find(delimeter);
+const char* Buffer::peek() const {
+    return recv_buffer_.data();
+}
 
-    if (pos == std::string::npos) {
-        return false; // 如果没找到字符串就返回false, 调用层进行处理
-    } else {
-        size_t delim_len = delimeter.length();
-        request = recv_buffer_.substr(0, pos + delim_len);
-        recv_buffer_.erase(0, pos + delim_len);
-        return true;
-    }
+size_t Buffer::readableBytes() const {
+    return recv_buffer_.size();
+}
+
+void Buffer::retrieve(size_t len) {
+    recv_buffer_.erase(0, len);
 }

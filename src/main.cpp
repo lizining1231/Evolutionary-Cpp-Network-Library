@@ -1,24 +1,27 @@
 #include "EventLoop.h"
+#include "decoder/DelimiterDecoder.h"
+#include "logger.h"
+#include "Config.h"
+
+#include <atomic>
+#include <chrono>
+#include <csignal>
 #include <cstdlib>
 #include <cstring>
 #include <iostream>
+#include <memory>
 #include <string>
 #include <thread>
 #include <vector>
-#include <atomic>
-#include <csignal>
-#include <memory>
-#include <chrono>
 
 std::atomic<bool> stopping{false};
 
-void signalHandle(int){
+void signalHandle(int) {
     stopping = true;
 }
 
-std::string
-handleMessage(char const *request,
-              size_t len) { // 之后可以改成const *std::string, 无需兼容数组
+std::string handleMessage(char const *request,
+                          size_t len) {  // 之后可以改成const *std::string, 无需兼容数组
 
     bool is_http_request = (std::strstr(request, "HTTP/") != NULL);
 
@@ -37,42 +40,39 @@ handleMessage(char const *request,
 }
 
 int main(int argc, char *argv[]) {
-    int port = 8080;
+    Config cfg;
+    cfg.init(argc, argv);              // 默认值 → config.json → CLI
 
-    if (argc >= 2) {
-        port = std::atoi(argv[1]);
-
-        if (port <= 0 || port > 65535) {
-            std::cerr << "错误: 端口号必须在1-65535之间" << std::endl;
-            return 1;
-        }
+    if (cfg.dump_config_) {
+        cfg.dump();
+        return 0;
     }
 
-    std::cout << "端口：" << port << std::endl;
+    LOG_INFO("Port: %d", cfg.port);
+    LOG_INFO("Threads: %d", cfg.thread_count);
 
     try {
-
-        signal(SIGINT,signalHandle);
-        signal(SIGTERM,signalHandle);
+        signal(SIGINT, signalHandle);
+        signal(SIGTERM, signalHandle);
 
         unsigned int thread_count = 4;
         std::vector<std::thread> threads;
 
-        std::cout << "Starting " << thread_count << " threads" << std::endl;
+        LOG_INFO("Starting %u threads", thread_count);
 
-        std::vector<std::unique_ptr<EventLoop>>loops;
+        std::vector<std::unique_ptr<EventLoop>> loops;
 
         for (unsigned int i = 0; i < thread_count; i++) {
-            auto loop = std::make_unique<EventLoop>(port);
+            auto loop = std::make_unique<EventLoop>(cfg);
             loop->setMessageCallback(handleMessage);
-            loop->setDelimeter("\r\n\r\n");
+            loop->setDecoder(std::make_unique<DelimiterDecoder>("\r\n\r\n"));
             loops.push_back(std::move(loop));
         }
 
         for (unsigned int i = 0; i < thread_count; i++) {
             threads.emplace_back([ptr = loops[i].get(), i]() {
-                std::cout << "[Thread " << i << "] starting..." << std::endl;
-                ptr -> start();
+                LOG_INFO("[Thread %u] starting...", i);
+                ptr->start();
             });
         }
 
@@ -81,26 +81,26 @@ int main(int argc, char *argv[]) {
         }
 
         for (unsigned int i = 0; i < thread_count; i++) {
-            loops[i] -> stop();
+            loops[i]->stop();
         }
 
         for (auto &t : threads) {
             t.join();
         }
 
-        std::cout << "TCP server stopped" << std::endl;
+        LOG_INFO("TCP server stopped");
         return 0;
 
     } catch (const std::runtime_error &e) {
-        std::cerr << "运行时错误：" << e.what() << std::endl;
+        LOG_ERROR("Runtime error: %s", e.what());
         return 1;
 
     } catch (const std::exception &e) {
-        std::cerr << "标准异常：" << e.what() << std::endl;
+        LOG_ERROR("Standard exception: %s", e.what());
         return 1;
 
     } catch (...) {
-        std::cerr << "未知异常" << std::endl;
+        LOG_ERROR("Unknown exception");
         return 1;
     }
 }

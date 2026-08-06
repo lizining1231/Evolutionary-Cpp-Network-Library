@@ -1,11 +1,18 @@
 #ifndef POLLER_H
 #define POLLER_H
 
+#include "Config.h"
+
 #include <sys/epoll.h>
 
+#include <functional>
+#include <vector>
+
 class Poller {
-  public:
-    explicit Poller(int listen_fd);
+public:
+    using EventCallback = std::function<void(int fd, uint32_t events)>;
+
+    explicit Poller(int listen_fd, Config& config);
     ~Poller() = default;
 
     void addFd(int client_fd);
@@ -15,17 +22,16 @@ class Poller {
     void enableOut(int client_fd);
     void disableOut(int client_fd);
 
-    int getReadyFd(int index);
-    int getEpoll_fd();
+    void iterateEvents(EventCallback cb);
 
-    static const int MAX_EVENTS = 4096;
-    struct epoll_event events_[MAX_EVENTS];
-    int ready_count_;
-
-  private:
-    int port_;
+private:
     int listen_fd_;
     int epoll_fd_;
+
+    int epoll_timeout_ms_;
+    int max_events_;
+    std::vector<struct epoll_event> events_;
+    int ready_count_;
 };
 
 #endif

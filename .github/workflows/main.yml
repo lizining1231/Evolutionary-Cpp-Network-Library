@@ -44,6 +44,6 @@ jobs:
         with:
           context: .
           push: false
-          tags: cpp-im-gateway:ci
+          tags: cpp-traffic-gateway:ci
           cache-from: type=gha
           cache-to: type=gha,mode=max

@@ -1,30 +1,48 @@
-cmake_minimum_required(VERSION 3.10)
-project(cpp-im-gateway LANGUAGES C CXX)
+cmake_minimum_required(VERSION 3.14)
+project(cpp-traffic-gateway LANGUAGES C CXX)
 
-# 改为C++14
-set(CMAKE_CXX_STANDARD 14)
+set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-# 创建可执行文件 - 名字叫 TCPserver
-add_executable(TCPserver  
-    src/main.cpp
+include(FetchContent)
+FetchContent_Declare(
+    googletest
+    URL https://github.com/google/googletest/archive/refs/tags/v1.14.0.zip
+    SOURCE_DIR ${CMAKE_SOURCE_DIR}/.cache/googletest-src
+)
+set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
+FetchContent_MakeAvailable(googletest)
+
+add_library(im_gateway STATIC
     src/Buffer.cpp
     src/SocketListener.cpp
     src/Poller.cpp
     src/Connection.cpp
     src/ConnectionManager.cpp
     src/EventLoop.cpp
+    src/decoder/DelimiterDecoder.cpp
+    src/TimerQueue.cpp
+    src/Config.cpp
 )
 
-# 包含目录 - 添加 include 目录
-target_include_directories(TCPserver PRIVATE  
+target_include_directories(im_gateway PRIVATE
     src
     src/server
-    include          # 添加这一行，让编译器能找到 TCPserver.h
+    include
 )
 
-# Linux系统库
-target_link_libraries(TCPserver pthread)  
+add_executable(TCPserver
+    src/main.cpp
+)
+
+target_include_directories(TCPserver PRIVATE
+    src
+    include
+)
+
+target_link_libraries(TCPserver im_gateway pthread)
+
+add_subdirectory(test)
 
 message(STATUS "Using C++${CMAKE_CXX_STANDARD} standard")
