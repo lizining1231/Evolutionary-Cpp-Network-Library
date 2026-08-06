@@ -1,0 +1,2 @@
+# 第三方单头文件库，不参与 GitHub 语言统计
+include/nlohmann/* linguist-vendored
