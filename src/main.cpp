@@ -55,7 +55,12 @@ int main(int argc, char *argv[]) {
         signal(SIGINT, signalHandle);
         signal(SIGTERM, signalHandle);
 
-        unsigned int thread_count = 4;
+        if (cfg.thread_count <= 0) {
+            LOG_ERROR("threads must be positive, got %d", cfg.thread_count);
+            return 1;
+        }
+
+        const unsigned int thread_count = static_cast<unsigned int>(cfg.thread_count);
         std::vector<std::thread> threads;
 
         LOG_INFO("Starting %u threads", thread_count);
